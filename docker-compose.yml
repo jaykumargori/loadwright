@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  jmeter:
+    image: justb4/jmeter:latest
+    container_name: jmeter-automation
+    volumes:
+      - ./tests:/tests
+      - ./results:/results
+      - ./jmeter_plugins:/plugins
+    environment:
+      - HEAP=1g
+      - JMETER_OPTS=
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "tail -f /dev/null"]
+
