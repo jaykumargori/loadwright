@@ -87,12 +87,15 @@ More docs:
 - [CI](docs/ci.md)
 - [Reports](docs/reports.md)
 - [Testing](docs/testing.md)
+- [Release checklist](docs/release.md)
 
 ## Commands
 
 ```bash
 loadwright doctor [--deep] [--image justb4/jmeter:latest]
+loadwright version
 loadwright init [path]
+loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
 loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
 loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 ```

@@ -133,7 +133,7 @@ func compile(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	loaded, err := loadResolvedSpec(specPath, envFile)
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid spec: %v\n", err)
+		writeSpecError(stderr, err)
 		return 1
 	}
 	out := output
@@ -169,7 +169,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	if isYAML(input) {
 		loaded, err := loadResolvedSpec(input, envFile)
 		if err != nil {
-			fmt.Fprintf(stderr, "invalid spec: %v\n", err)
+			writeSpecError(stderr, err)
 			return 1
 		}
 		thresholds = loaded.Thresholds
@@ -258,6 +258,35 @@ func loadResolvedSpec(path string, envFile string) (*spec.Spec, error) {
 		return nil, err
 	}
 	return loaded.Resolve(env, spec.WithBaseDir(filepath.Dir(path)))
+}
+
+func writeSpecError(w io.Writer, err error) {
+	lines := errorLines(err)
+	if len(lines) == 0 {
+		fmt.Fprintf(w, "invalid spec: %v\n", err)
+		return
+	}
+	fmt.Fprintln(w, "invalid spec:")
+	for _, line := range lines {
+		fmt.Fprintf(w, "  - %s\n", line)
+	}
+}
+
+func errorLines(err error) []string {
+	if err == nil {
+		return nil
+	}
+	type multiUnwrapper interface {
+		Unwrap() []error
+	}
+	if joined, ok := err.(multiUnwrapper); ok {
+		var lines []string
+		for _, child := range joined.Unwrap() {
+			lines = append(lines, errorLines(child)...)
+		}
+		return lines
+	}
+	return []string{err.Error()}
 }
 
 func parseCompileArgs(args []string) (specPath string, output string, envFile string, err error) {

@@ -22,7 +22,7 @@ The command exits with:
 ## Example GitHub Actions Step
 
 ```yaml
-- uses: actions/setup-go@v5
+- uses: actions/setup-go@v6
   with:
     go-version: "1.22"
 - run: go build -o bin/loadwright ./cmd/loadwright

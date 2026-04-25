@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -220,8 +221,57 @@ func TestRunCompileRejectsInvalidSpec(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"compile", "bad.yaml"}, &stdout, &stderr)
-	if code != 1 || !strings.Contains(stderr.String(), "invalid spec") {
+	if code != 1 || !strings.Contains(stderr.String(), "invalid spec:") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "- target must be an absolute http or https URL") ||
+		!strings.Contains(stderr.String(), "- requests must contain at least one request") {
+		t.Fatalf("expected grouped validation errors, got stderr=%s", stderr.String())
+	}
+}
+
+func TestRunSpecCreatesReportsWithDockerShim(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: shim-run
+target: https://example.com
+load:
+  users: 2
+  loops: 1
+requests:
+  - name: health
+    method: GET
+    path: /health
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 500
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--out-dir", "results/smoke", "--ci"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html"} {
+		if _, err := os.Stat(filepath.Join("results", "smoke", name)); err != nil {
+			t.Fatalf("expected %s: %v", name, err)
+		}
+	}
+	summary, err := os.ReadFile(filepath.Join("results", "smoke", "summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(summary), `"total_samples": 1`) ||
+		!strings.Contains(string(summary), `"failed": 0`) {
+		t.Fatalf("unexpected summary: %s", summary)
 	}
 }
 
@@ -237,6 +287,60 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() {
 		if err := os.Chdir(previous); err != nil {
 			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+}
+
+func installDockerShim(t *testing.T, dir string) {
+	t.Helper()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := `#!/bin/sh
+set -eu
+workdir=""
+jtl=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -v)
+      workdir="${2%:/work}"
+      shift 2
+      ;;
+    -l)
+      jtl="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ -z "$workdir" ] || [ -z "$jtl" ]; then
+  echo "fake docker expected -v and -l" >&2
+  exit 1
+fi
+case "$jtl" in
+  /work/*) output="$workdir/${jtl#/work/}" ;;
+  *) output="$jtl" ;;
+esac
+mkdir -p "$(dirname "$output")"
+cat > "$output" <<'JTL'
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1,120,health,200,OK,thread-1,text,true,64,64,1,1,https://example.com/health,100,0,20
+JTL
+`
+	dockerPath := filepath.Join(binDir, "docker")
+	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previousPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", binDir+string(os.PathListSeparator)+previousPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("PATH", previousPath); err != nil {
+			t.Fatalf("restore PATH: %v", err)
 		}
 	})
 }

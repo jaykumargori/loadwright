@@ -26,6 +26,14 @@ bin/loadwright run examples/api/post-json.yaml --ci
 
 Demonstrates JSON request bodies and custom headers.
 
+## Checkout Flow
+
+```bash
+bin/loadwright run examples/api/checkout-flow.yaml --ci
+```
+
+Demonstrates a small multi-step user journey with query params, JSON bodies, status assertions, and thresholds.
+
 ## Duration Load
 
 ```bash

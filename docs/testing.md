@@ -34,11 +34,17 @@ find examples/openapi -name '*.yaml' -print | sort | while read -r spec; do
 done
 ```
 
+Run a real JMeter smoke test before cutting a release:
+
+```bash
+bin/loadwright run examples/api/query-params.yaml --out-dir results/manual-smoke --ci
+```
+
 ## Current Coverage Focus
 
 - Spec validation, defaults, variables, env files, auth, and timeout behavior.
 - JMX rendering, including headers, query params, JSON bodies, assertions, duration loads, and timeouts.
 - JTL parsing, percentile summaries, threshold pass/fail, and report artifacts.
-- CLI parsing and non-Docker command flows.
+- CLI parsing, non-Docker command flows, and end-to-end run/report generation with a Docker shim.
 - OpenAPI import for YAML, JSON, path/query params, request bodies, and error cases.
 - Runtime helper behavior for doctor/version parsing.

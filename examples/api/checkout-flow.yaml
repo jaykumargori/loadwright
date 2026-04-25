@@ -1,0 +1,38 @@
+name: checkout-flow
+target: https://httpbin.org
+load:
+  users: 3
+  ramp_up: 5s
+  loops: 2
+requests:
+  - name: browse catalog
+    method: GET
+    path: /anything/catalog
+    query:
+      category: books
+      sort: popular
+    expect:
+      status: 200
+  - name: add item to cart
+    method: POST
+    path: /anything/cart
+    headers:
+      content-type: application/json
+    body:
+      sku: book-123
+      quantity: 1
+    expect:
+      status: 200
+  - name: checkout
+    method: POST
+    path: /anything/checkout
+    headers:
+      content-type: application/json
+    body:
+      payment_method: test-card
+      shipping_tier: standard
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 4000

@@ -102,6 +102,32 @@ func TestSpecValidationFailures(t *testing.T) {
 	}
 }
 
+func TestSpecValidationCollectsMultipleFailures(t *testing.T) {
+	loops := 0
+	raw := Spec{
+		Load: Load{Users: -1, Loops: &loops},
+		Requests: []Request{
+			{Method: "TRACE", Path: "missing-leading-slash"},
+			{Path: "/ok"},
+		},
+	}
+	err := raw.NormalizeAndValidate()
+	if err == nil {
+		t.Fatalf("expected validation error")
+	}
+	for _, want := range []string{
+		"name is required",
+		"target must be an absolute http or https URL",
+		"load.users must be greater than 0",
+		"load.loops must be greater than 0",
+		"requests[0].method is not supported: TRACE",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
+	}
+}
+
 func TestDurationLoadDefaultsToInfiniteLoops(t *testing.T) {
 	raw := Spec{
 		Name:   "duration",

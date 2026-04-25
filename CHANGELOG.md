@@ -20,3 +20,4 @@
 - Expand test coverage across CLI, spec, report, runtime helper, and OpenAPI edge cases.
 - Add CSV data source support backed by JMeter `CSVDataSet`.
 - Add version metadata, GoReleaser config, release workflows, Dockerfile, and install docs.
+- Add release checklist, realistic checkout example, and pre-release hardening tests.

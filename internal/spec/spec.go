@@ -186,30 +186,31 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 	for _, opt := range opts {
 		opt(&options)
 	}
+	var validationErrors []error
 	s.Name = strings.TrimSpace(s.Name)
 	if s.Name == "" {
-		return errors.New("name is required")
+		validationErrors = append(validationErrors, errors.New("name is required"))
 	}
 	s.Target = strings.TrimRight(strings.TrimSpace(s.Target), "/")
 	parsedTarget, err := url.Parse(s.Target)
 	if err != nil || parsedTarget.Scheme == "" || parsedTarget.Host == "" {
-		return errors.New("target must be an absolute http or https URL")
-	}
-	if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
-		return errors.New("target must use http or https")
+		validationErrors = append(validationErrors, errors.New("target must be an absolute http or https URL"))
+	} else if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
+		validationErrors = append(validationErrors, errors.New("target must use http or https"))
 	}
 	if s.Variables == nil {
 		s.Variables = map[string]string{}
 	}
 	if err := s.Auth.NormalizeAndValidate("auth"); err != nil {
-		return err
+		validationErrors = append(validationErrors, err)
 	}
 	if s.Data == nil {
 		s.Data = map[string]DataSet{}
 	}
 	for name, dataSet := range s.Data {
 		if err := dataSet.NormalizeAndValidate(name, options.baseDir); err != nil {
-			return err
+			validationErrors = append(validationErrors, err)
+			continue
 		}
 		s.Data[name] = dataSet
 	}
@@ -217,7 +218,7 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 		s.Load.Users = 1
 	}
 	if s.Load.Users < 0 {
-		return errors.New("load.users must be greater than 0")
+		validationErrors = append(validationErrors, errors.New("load.users must be greater than 0"))
 	}
 	if !s.Load.RampUp.Set {
 		s.Load.RampUp = Duration{Seconds: 1, Set: true}
@@ -227,20 +228,21 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 		s.Load.Loops = &defaultLoops
 	}
 	if s.Load.Loops != nil && *s.Load.Loops <= 0 {
-		return errors.New("load.loops must be greater than 0")
+		validationErrors = append(validationErrors, errors.New("load.loops must be greater than 0"))
 	}
 	if len(s.Requests) == 0 {
-		return errors.New("requests must contain at least one request")
+		validationErrors = append(validationErrors, errors.New("requests must contain at least one request"))
 	}
 	for index := range s.Requests {
 		if err := s.Requests[index].NormalizeAndValidate(index); err != nil {
-			return err
+			validationErrors = append(validationErrors, err)
+			continue
 		}
 		if !s.Requests[index].Timeout.Set && s.Defaults.Timeout.Set {
 			s.Requests[index].Timeout = s.Defaults.Timeout
 		}
 	}
-	return nil
+	return errors.Join(validationErrors...)
 }
 
 func (r *Request) NormalizeAndValidate(index int) error {
