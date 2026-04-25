@@ -73,3 +73,12 @@ bin/loadwright run examples/api/timeouts.yaml --ci
 ```
 
 Demonstrates default and request-specific timeouts.
+
+## OpenAPI Import
+
+```bash
+bin/loadwright import openapi examples/openapi/petstore-lite.yaml -o /tmp/petstore-loadwright.yaml
+bin/loadwright compile /tmp/petstore-loadwright.yaml -o /tmp/petstore.jmx
+```
+
+Demonstrates generating a starter Loadwright spec from OpenAPI 3.x.

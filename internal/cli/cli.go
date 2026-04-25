@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devaryakjha/loadwright/internal/jmx"
+	"github.com/devaryakjha/loadwright/internal/openapi"
 	"github.com/devaryakjha/loadwright/internal/report"
 	"github.com/devaryakjha/loadwright/internal/runtime"
 	"github.com/devaryakjha/loadwright/internal/spec"
@@ -31,6 +32,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return compile(args[1:], stdout, stderr)
 	case "run":
 		return run(args[1:], stdout, stderr)
+	case "import":
+		return importCommand(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
 		usage(stderr)
@@ -44,12 +47,14 @@ func usage(w io.Writer) {
 Usage:
   loadwright doctor [--deep] [--image justb4/jmeter:latest]
   loadwright init [path]
+  loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
   init      Write a starter YAML spec
+  import    Convert supported source formats to Loadwright specs
   compile   Compile a YAML spec to JMeter JMX
   run       Run a YAML spec or existing JMX through Dockerized JMeter`)
 }
@@ -201,6 +206,42 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
+func importCommand(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "import requires a source type")
+		return 2
+	}
+	switch args[0] {
+	case "openapi":
+		return importOpenAPI(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unsupported import source: %s\n", args[0])
+		return 2
+	}
+}
+
+func importOpenAPI(args []string, stdout io.Writer, stderr io.Writer) int {
+	input, output, baseURL, err := parseImportOpenAPIArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	imported, err := openapi.ImportFile(input, openapi.Options{BaseURL: baseURL})
+	if err != nil {
+		fmt.Fprintf(stderr, "import failed: %v\n", err)
+		return 1
+	}
+	if output == "" {
+		output = "loadwright.yaml"
+	}
+	if err := spec.WriteFile(imported, output); err != nil {
+		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
 func loadResolvedSpec(path string, envFile string) (*spec.Spec, error) {
 	env, err := spec.LoadEnvFile(envFile)
 	if err != nil {
@@ -286,6 +327,39 @@ func parseRunArgs(args []string) (input string, outputDir string, envFile string
 		return "", "", "", false, "", fmt.Errorf("run requires exactly one spec or JMX path")
 	}
 	return positional[0], outputDir, envFile, ci, image, nil
+}
+
+func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL string, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-o" || arg == "--out":
+			i++
+			if i >= len(args) {
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			output = args[i]
+		case strings.HasPrefix(arg, "-o="):
+			output = strings.TrimPrefix(arg, "-o=")
+		case strings.HasPrefix(arg, "--out="):
+			output = strings.TrimPrefix(arg, "--out=")
+		case arg == "--base-url":
+			i++
+			if i >= len(args) {
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			baseURL = args[i]
+		case strings.HasPrefix(arg, "--base-url="):
+			baseURL = strings.TrimPrefix(arg, "--base-url=")
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 1 {
+		return "", "", "", fmt.Errorf("import openapi requires exactly one input file")
+	}
+	return positional[0], output, baseURL, nil
 }
 
 func isYAML(path string) bool {

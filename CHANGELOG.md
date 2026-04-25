@@ -16,3 +16,4 @@
 - Add query-param, POST JSON, duration-load, and threshold-failure examples.
 - Add getting started, examples, CI, and reports documentation.
 - Add variables, env files, bearer/basic auth helpers, and request timeouts.
+- Add initial OpenAPI 3.x import support.

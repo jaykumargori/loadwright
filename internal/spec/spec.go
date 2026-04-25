@@ -32,6 +32,17 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+func (d Duration) MarshalYAML() (any, error) {
+	if !d.Set {
+		return nil, nil
+	}
+	return fmt.Sprintf("%ds", d.Seconds), nil
+}
+
+func (d Duration) IsZero() bool {
+	return !d.Set
+}
+
 func ParseDuration(raw any) (int, error) {
 	switch value := raw.(type) {
 	case int:
@@ -69,42 +80,50 @@ func ParseDuration(raw any) (int, error) {
 type Spec struct {
 	Name       string            `yaml:"name"`
 	Target     string            `yaml:"target"`
-	Variables  map[string]string `yaml:"variables"`
-	Defaults   Defaults          `yaml:"defaults"`
-	Auth       Auth              `yaml:"auth"`
+	Variables  map[string]string `yaml:"variables,omitempty"`
+	Defaults   Defaults          `yaml:"defaults,omitempty"`
+	Auth       Auth              `yaml:"auth,omitempty"`
 	Load       Load              `yaml:"load"`
 	Requests   []Request         `yaml:"requests"`
-	Thresholds Thresholds        `yaml:"thresholds"`
+	Thresholds Thresholds        `yaml:"thresholds,omitempty"`
 }
 
 type Defaults struct {
-	Timeout Duration `yaml:"timeout"`
+	Timeout Duration `yaml:"timeout,omitempty"`
+}
+
+func (d Defaults) IsZero() bool {
+	return d.Timeout.IsZero()
 }
 
 type Load struct {
 	Users    int      `yaml:"users"`
-	RampUp   Duration `yaml:"ramp_up"`
-	Duration Duration `yaml:"duration"`
-	Loops    *int     `yaml:"loops"`
+	RampUp   Duration `yaml:"ramp_up,omitempty"`
+	Duration Duration `yaml:"duration,omitempty"`
+	Loops    *int     `yaml:"loops,omitempty"`
 }
 
 type Request struct {
 	Name    string            `yaml:"name"`
 	Method  string            `yaml:"method"`
 	Path    string            `yaml:"path"`
-	Headers map[string]string `yaml:"headers"`
-	Query   map[string]string `yaml:"query"`
-	Body    any               `yaml:"body"`
-	Auth    Auth              `yaml:"auth"`
-	Timeout Duration          `yaml:"timeout"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Query   map[string]string `yaml:"query,omitempty"`
+	Body    any               `yaml:"body,omitempty"`
+	Auth    Auth              `yaml:"auth,omitempty"`
+	Timeout Duration          `yaml:"timeout,omitempty"`
 	Expect  Expect            `yaml:"expect"`
 }
 
 type Auth struct {
-	Type     string `yaml:"type"`
-	Token    string `yaml:"token"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Type     string `yaml:"type,omitempty"`
+	Token    string `yaml:"token,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
+
+func (a Auth) IsZero() bool {
+	return a.Type == "" && a.Token == "" && a.Username == "" && a.Password == ""
 }
 
 type Expect struct {
@@ -112,9 +131,9 @@ type Expect struct {
 }
 
 type Thresholds struct {
-	ErrorRateLT *float64 `yaml:"error_rate_lt"`
-	P95MsLT     *float64 `yaml:"p95_ms_lt"`
-	AvgMsLT     *float64 `yaml:"avg_ms_lt"`
+	ErrorRateLT *float64 `yaml:"error_rate_lt,omitempty"`
+	P95MsLT     *float64 `yaml:"p95_ms_lt,omitempty"`
+	AvgMsLT     *float64 `yaml:"avg_ms_lt,omitempty"`
 }
 
 func LoadFile(path string) (*Spec, error) {

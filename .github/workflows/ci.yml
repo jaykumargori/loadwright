@@ -20,10 +20,18 @@ jobs:
       - name: Compile examples
         run: |
           mkdir -p /tmp/loadwright-examples
-          find examples -name '*.yaml' -print | sort | while read -r spec; do
+          find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | while read -r spec; do
             if grep -q '\${' "$spec"; then
               bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
             else
               bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
             fi
+          done
+      - name: Import OpenAPI examples
+        run: |
+          mkdir -p /tmp/loadwright-openapi
+          find examples/openapi -name '*.yaml' -print | sort | while read -r spec; do
+            name="$(basename "$spec" .yaml)"
+            bin/loadwright import openapi "$spec" -o "/tmp/loadwright-openapi/$name.loadwright.yaml"
+            bin/loadwright compile "/tmp/loadwright-openapi/$name.loadwright.yaml" -o "/tmp/loadwright-openapi/$name.jmx"
           done

@@ -81,6 +81,7 @@ More docs:
 
 - [Getting started](docs/getting-started.md)
 - [Examples](docs/examples.md)
+- [OpenAPI import](docs/openapi-import.md)
 - [CI](docs/ci.md)
 - [Reports](docs/reports.md)
 

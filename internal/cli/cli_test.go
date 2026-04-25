@@ -38,6 +38,16 @@ func TestParseDoctorArgs(t *testing.T) {
 	}
 }
 
+func TestParseImportOpenAPIArgs(t *testing.T) {
+	input, output, baseURL, err := parseImportOpenAPIArgs([]string{"openapi.yaml", "-o", "loadwright.yaml", "--base-url=https://staging.example.com"})
+	if err != nil {
+		t.Fatalf("parseImportOpenAPIArgs() error = %v", err)
+	}
+	if input != "openapi.yaml" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
+		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
 func TestRunInitCreatesStarterSpec(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
@@ -113,6 +123,37 @@ requests:
 	}
 	if !strings.Contains(string(data), "Bearer abc123") {
 		t.Fatalf("compiled JMX missing resolved bearer token: %s", data)
+	}
+}
+
+func TestRunImportOpenAPICreatesSpec(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	openAPI := `openapi: 3.0.3
+info:
+  title: Import Test
+servers:
+  - url: https://api.example.com
+paths:
+  /health:
+    get:
+      responses:
+        "200": {}
+`
+	if err := os.WriteFile("openapi.yaml", []byte(openAPI), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "openapi", "openapi.yaml", "-o", "loadwright.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(import openapi) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile("loadwright.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "target: https://api.example.com") {
+		t.Fatalf("unexpected imported spec: %s", data)
 	}
 }
 
