@@ -1,0 +1,24 @@
+name: httpbin-post-json
+target: https://httpbin.org
+load:
+  users: 3
+  ramp_up: 5s
+  loops: 2
+requests:
+  - name: create payload
+    method: POST
+    path: /post
+    headers:
+      content-type: application/json
+      x-loadwright-example: post-json
+    body:
+      order_id: demo-001
+      amount: 42.5
+      tags:
+        - example
+        - json
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

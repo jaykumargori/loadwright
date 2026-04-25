@@ -1,0 +1,15 @@
+name: httpbin-duration-load
+target: https://httpbin.org
+load:
+  users: 5
+  ramp_up: 10s
+  duration: 30s
+requests:
+  - name: duration health check
+    method: GET
+    path: /status/200
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

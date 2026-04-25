@@ -1,6 +1,11 @@
 package spec
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestSpecDefaultsAndDurations(t *testing.T) {
 	raw := Spec{
@@ -53,5 +58,88 @@ func TestSpecRejectsBadTarget(t *testing.T) {
 	}
 	if err := raw.NormalizeAndValidate(); err == nil {
 		t.Fatalf("expected invalid target error")
+	}
+}
+
+func TestDurationLoadDefaultsToInfiniteLoops(t *testing.T) {
+	raw := Spec{
+		Name:   "duration",
+		Target: "https://example.com",
+		Load: Load{
+			Users:    4,
+			Duration: Duration{Seconds: 120, Set: true},
+		},
+		Requests: []Request{{Path: "/health"}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	if raw.Load.Loops != nil {
+		t.Fatalf("duration-based loads should not default loops")
+	}
+}
+
+func TestRequestValidationScenarios(t *testing.T) {
+	tests := []struct {
+		name    string
+		request Request
+		want    string
+	}{
+		{
+			name:    "bad path",
+			request: Request{Method: "GET", Path: "health"},
+			want:    "path must start with /",
+		},
+		{
+			name:    "bad method",
+			request: Request{Method: "TRACE", Path: "/health"},
+			want:    "method is not supported",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.request.NormalizeAndValidate(0)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadFileParsesThresholdsAndRequestShape(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spec.yaml")
+	yaml := `name: parse-me
+target: https://example.com
+load:
+  users: 2
+  ramp_up: 5s
+requests:
+  - method: POST
+    path: /submit
+    headers:
+      content-type: application/json
+    query:
+      trace: "true"
+    body:
+      ok: true
+    expect:
+      status: 201
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 500
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile() error = %v", err)
+	}
+	if loaded.Load.RampUp.Seconds != 5 || loaded.Requests[0].Expect.Status != 201 {
+		t.Fatalf("unexpected loaded spec: %+v", loaded)
+	}
+	if loaded.Thresholds.ErrorRateLT == nil || *loaded.Thresholds.ErrorRateLT != 1 {
+		t.Fatalf("threshold not parsed: %+v", loaded.Thresholds)
 	}
 }

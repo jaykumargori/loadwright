@@ -12,3 +12,6 @@
 - Rename project to Loadwright.
 - Move the original Python prototype under `legacy/python-prototype`.
 - Expand `doctor` with directory, image, and optional deep JMeter runtime checks.
+- Expand tests across spec validation, JMX rendering, report parsing, and CLI flows.
+- Add query-param, POST JSON, duration-load, and threshold-failure examples.
+- Add getting started, examples, CI, and reports documentation.

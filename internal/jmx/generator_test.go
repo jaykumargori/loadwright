@@ -89,3 +89,63 @@ func TestExampleGoldenHash(t *testing.T) {
 		t.Fatalf("JMX golden hash changed: got %s, want %s", got, want)
 	}
 }
+
+func TestRenderQueryParamsAndJSONBody(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "request shapes",
+		Target: "https://api.example.com:8443",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{
+			{
+				Name:   "search",
+				Method: "GET",
+				Path:   "/search",
+				Query:  map[string]string{"page": "1", "q": "load test"},
+			},
+			{
+				Name:    "create",
+				Method:  "POST",
+				Path:    "/items",
+				Headers: map[string]string{"content-type": "application/json"},
+				Body:    map[string]any{"name": "demo", "active": true},
+			},
+		},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<stringProp name="HTTPSampler.port">8443</stringProp>`,
+		`<stringProp name="Argument.name">page</stringProp>`,
+		`<stringProp name="Argument.value">load test</stringProp>`,
+		`<boolProp name="HTTPSampler.postBodyRaw">true</boolProp>`,
+		`{&#34;active&#34;:true,&#34;name&#34;:&#34;demo&#34;}`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("rendered JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderDurationBasedLoad(t *testing.T) {
+	loaded := &spec.Spec{
+		Name:   "duration load",
+		Target: "https://example.com",
+		Load: spec.Load{
+			Users:    10,
+			RampUp:   spec.Duration{Seconds: 30, Set: true},
+			Duration: spec.Duration{Seconds: 120, Set: true},
+		},
+		Requests: []spec.Request{{Name: "health", Method: "GET", Path: "/health"}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<boolProp name="LoopController.continue_forever">true</boolProp>`,
+		`<stringProp name="LoopController.loops">-1</stringProp>`,
+		`<boolProp name="ThreadGroup.scheduler">true</boolProp>`,
+		`<stringProp name="ThreadGroup.duration">120</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("duration JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}

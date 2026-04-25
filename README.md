@@ -77,6 +77,13 @@ thresholds:
 
 See [docs/spec-reference.md](docs/spec-reference.md) for the current spec format.
 
+More docs:
+
+- [Getting started](docs/getting-started.md)
+- [Examples](docs/examples.md)
+- [CI](docs/ci.md)
+- [Reports](docs/reports.md)
+
 ## Commands
 
 ```bash

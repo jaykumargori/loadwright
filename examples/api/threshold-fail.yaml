@@ -1,0 +1,15 @@
+name: httpbin-threshold-fail
+target: https://httpbin.org
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: intentional threshold demo
+    method: GET
+    path: /status/200
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 1

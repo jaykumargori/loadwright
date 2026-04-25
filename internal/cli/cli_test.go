@@ -1,6 +1,12 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestParseCompileArgsAcceptsFlagsAfterSpec(t *testing.T) {
 	specPath, output, err := parseCompileArgs([]string{"spec.yaml", "-o", "tests/spec.jmx"})
@@ -29,5 +35,72 @@ func TestParseDoctorArgs(t *testing.T) {
 	}
 	if !deep || image != "custom:jmeter" {
 		t.Fatalf("unexpected args: deep=%v image=%q", deep, image)
+	}
+}
+
+func TestRunInitCreatesStarterSpec(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(init) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "loadwright.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "name: example-api") {
+		t.Fatalf("unexpected starter spec: %s", data)
+	}
+}
+
+func TestRunCompileCreatesJMX(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	specPath := filepath.Join(dir, "spec.yaml")
+	specYAML := `name: compile-me
+target: https://example.com
+requests:
+  - path: /health
+`
+	if err := os.WriteFile(specPath, []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compile", specPath, "-o", "out/test.jmx"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(compile) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "out", "test.jmx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `testname="compile-me"`) {
+		t.Fatalf("unexpected JMX: %s", data)
+	}
+}
+
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+}
+
+func TestRunRejectsUnknownCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"wat"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 }
