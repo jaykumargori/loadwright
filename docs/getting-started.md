@@ -41,10 +41,19 @@ bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
 
 The generated `.jmx` file can be opened in the JMeter GUI or run by JMeter directly.
 
+## Validate Without Running
+
+```bash
+bin/loadwright validate examples/api/basic.yaml
+```
+
+Validation resolves variables and env files, applies defaults, and reports spec errors without starting Docker or JMeter.
+
 ## Env Files
 
 Specs can reference environment values with `${NAME}` and variables with `{{name}}`.
 
 ```bash
+bin/loadwright validate examples/api/env-file.yaml --env-file examples/api/.env.example
 bin/loadwright run examples/api/env-file.yaml --env-file examples/api/.env.example --ci
 ```

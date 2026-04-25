@@ -4,6 +4,7 @@ Loadwright is designed to fail CI when performance thresholds are breached.
 
 ```bash
 go build -o bin/loadwright ./cmd/loadwright
+bin/loadwright validate examples/api/basic.yaml
 bin/loadwright run examples/api/basic.yaml --ci
 ```
 
@@ -11,6 +12,12 @@ For environment-specific tests:
 
 ```bash
 bin/loadwright run loadwright.yaml --env-file .env.ci --ci
+```
+
+Use `validate` in fast pull request jobs when you want spec checks without starting JMeter:
+
+```bash
+bin/loadwright validate loadwright.yaml --env-file .env.ci
 ```
 
 The command exits with:
@@ -32,7 +39,14 @@ The command exits with:
 For fast pull request checks, compile specs without running load:
 
 ```bash
-for spec in examples/**/*.yaml; do
-  bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+mkdir -p /tmp/loadwright-examples
+find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | while read -r spec; do
+  if grep -q '\${' "$spec"; then
+    bin/loadwright validate "$spec" --env-file examples/api/.env.example
+    bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+  else
+    bin/loadwright validate "$spec"
+    bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+  fi
 done
 ```

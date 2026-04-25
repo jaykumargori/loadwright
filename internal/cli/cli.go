@@ -32,6 +32,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return doctor(args[1:], stdout, stderr)
 	case "init":
 		return initSpec(args[1:], stdout, stderr)
+	case "validate":
+		return validate(args[1:], stdout, stderr)
 	case "compile":
 		return compile(args[1:], stdout, stderr)
 	case "run":
@@ -53,6 +55,7 @@ Usage:
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+  loadwright validate <spec.yaml> [--env-file .env.test]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 
@@ -61,6 +64,7 @@ Commands:
   version   Print version information
   init      Write a starter YAML spec
   import    Convert supported source formats to Loadwright specs
+  validate  Validate a YAML spec without compiling or running JMeter
   compile   Compile a YAML spec to JMeter JMX
   run       Run a YAML spec or existing JMX through Dockerized JMeter`)
 }
@@ -145,6 +149,25 @@ func compile(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "wrote %s\n", out)
+	return 0
+}
+
+func validate(args []string, stdout io.Writer, stderr io.Writer) int {
+	specPath, envFile, err := parseValidateArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	loaded, err := loadResolvedSpec(specPath, envFile)
+	if err != nil {
+		writeSpecError(stderr, err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "valid spec: %s (%d request", loaded.Name, len(loaded.Requests))
+	if len(loaded.Requests) != 1 {
+		fmt.Fprint(stdout, "s")
+	}
+	fmt.Fprintln(stdout, ")")
 	return 0
 }
 
@@ -320,6 +343,29 @@ func parseCompileArgs(args []string) (specPath string, output string, envFile st
 		return "", "", "", fmt.Errorf("compile requires exactly one spec path")
 	}
 	return positional[0], output, envFile, nil
+}
+
+func parseValidateArgs(args []string) (specPath string, envFile string, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--env-file":
+			i++
+			if i >= len(args) {
+				return "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			envFile = args[i]
+		case strings.HasPrefix(arg, "--env-file="):
+			envFile = strings.TrimPrefix(arg, "--env-file=")
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 1 {
+		return "", "", fmt.Errorf("validate requires exactly one spec path")
+	}
+	return positional[0], envFile, nil
 }
 
 func parseRunArgs(args []string) (input string, outputDir string, envFile string, ci bool, image string, err error) {

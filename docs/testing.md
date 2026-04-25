@@ -16,8 +16,10 @@ Compile every runnable example:
 mkdir -p /tmp/loadwright-examples
 find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | while read -r spec; do
   if grep -q '\${' "$spec"; then
+    bin/loadwright validate "$spec" --env-file examples/api/.env.example
     bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
   else
+    bin/loadwright validate "$spec"
     bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
   fi
 done

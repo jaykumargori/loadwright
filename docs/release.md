@@ -20,6 +20,7 @@ goreleaser release --snapshot --clean --skip=publish
 ```bash
 go build -o bin/loadwright ./cmd/loadwright
 bin/loadwright version
+bin/loadwright validate examples/api/basic.yaml
 bin/loadwright compile examples/api/basic.yaml -o /tmp/loadwright-basic.jmx
 ```
 

@@ -26,8 +26,10 @@ jobs:
           find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | while read -r spec; do
             # shellcheck disable=SC2016
             if grep -q '\${[A-Z_][A-Z0-9_]*}' "$spec"; then
+              bin/loadwright validate "$spec" --env-file examples/api/.env.example
               bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
             else
+              bin/loadwright validate "$spec"
               bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
             fi
           done

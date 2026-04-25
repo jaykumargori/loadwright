@@ -21,3 +21,5 @@
 - Add CSV data source support backed by JMeter `CSVDataSet`.
 - Add version metadata, GoReleaser config, release workflows, Dockerfile, and install docs.
 - Add release checklist, realistic checkout example, and pre-release hardening tests.
+- Add `loadwright validate` for fast no-Docker spec checks.
+- Add GitHub issue/PR templates and compatibility policy.

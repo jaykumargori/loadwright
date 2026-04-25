@@ -1,0 +1,57 @@
+name: Bug Report
+description: Report something that is broken or surprising.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include API keys, production credentials, private endpoints, or proprietary JMeter plans.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include a minimal spec and exact commands when possible.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Paste relevant CLI output, validation errors, or report snippets.
+      render: text
+  - type: input
+    id: loadwright-version
+    attributes:
+      label: Loadwright version
+      placeholder: loadwright version
+  - type: input
+    id: jmeter-image
+    attributes:
+      label: JMeter image
+      placeholder: justb4/jmeter:latest
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed secrets and proprietary details from this report.
+          required: true

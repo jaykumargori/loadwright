@@ -39,6 +39,25 @@ func TestParseCompileArgsErrors(t *testing.T) {
 	}
 }
 
+func TestParseValidateArgs(t *testing.T) {
+	specPath, envFile, err := parseValidateArgs([]string{"spec.yaml", "--env-file=.env.test"})
+	if err != nil {
+		t.Fatalf("parseValidateArgs() error = %v", err)
+	}
+	if specPath != "spec.yaml" || envFile != ".env.test" {
+		t.Fatalf("unexpected args: spec=%q env=%q", specPath, envFile)
+	}
+}
+
+func TestParseValidateArgsErrors(t *testing.T) {
+	if _, _, err := parseValidateArgs([]string{"spec.yaml", "--env-file"}); err == nil {
+		t.Fatalf("expected missing env-file value error")
+	}
+	if _, _, err := parseValidateArgs([]string{}); err == nil {
+		t.Fatalf("expected missing spec error")
+	}
+}
+
 func TestParseRunArgsAcceptsInterspersedFlags(t *testing.T) {
 	input, outputDir, envFile, ci, image, err := parseRunArgs([]string{"spec.yaml", "--ci", "--out-dir=results/test", "--env-file=.env.test", "--image", "jmeter:test"})
 	if err != nil {
@@ -171,6 +190,51 @@ requests:
 	}
 	if !strings.Contains(string(data), "Bearer abc123") {
 		t.Fatalf("compiled JMX missing resolved bearer token: %s", data)
+	}
+}
+
+func TestRunValidateAcceptsResolvedSpec(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	specYAML := `name: validate-me
+target: https://example.com
+variables:
+  token: ${API_TOKEN}
+auth:
+  type: bearer
+  token: "{{token}}"
+requests:
+  - path: /secure
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".env.test", []byte("API_TOKEN=abc123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", "spec.yaml", "--env-file", ".env.test"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(validate) code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "valid spec: validate-me (1 request)") {
+		t.Fatalf("unexpected validate output: %s", stdout.String())
+	}
+}
+
+func TestRunValidateRejectsInvalidSpec(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	if err := os.WriteFile("bad.yaml", []byte("name: bad\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", "bad.yaml"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "invalid spec:") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout, got %s", stdout.String())
 	}
 }
 

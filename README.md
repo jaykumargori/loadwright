@@ -38,6 +38,7 @@ Or use the included example:
 
 ```bash
 bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
+bin/loadwright validate examples/api/basic.yaml
 bin/loadwright run examples/api/basic.yaml --ci
 ```
 
@@ -88,6 +89,7 @@ More docs:
 - [Reports](docs/reports.md)
 - [Testing](docs/testing.md)
 - [Release checklist](docs/release.md)
+- [Compatibility](docs/compatibility.md)
 
 ## Commands
 
@@ -96,6 +98,7 @@ loadwright doctor [--deep] [--image justb4/jmeter:latest]
 loadwright version
 loadwright init [path]
 loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+loadwright validate <spec.yaml> [--env-file .env.test]
 loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
 loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 ```
