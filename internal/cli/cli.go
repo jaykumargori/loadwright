@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return compile(args[1:], stdout, stderr)
 	case "run":
 		return run(args[1:], stdout, stderr)
+	case "report":
+		return reportCommand(args[1:], stdout, stderr)
 	case "import":
 		return importCommand(args[1:], stdout, stderr)
 	default:
@@ -58,6 +61,7 @@ Usage:
   loadwright validate <spec.yaml> [--env-file .env.test]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
+  loadwright report <results.jtl> [--out-dir results/report] [--error-rate-lt 1] [--p95-ms-lt 3000] [--avg-ms-lt 1000] [--ci]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
@@ -66,7 +70,8 @@ Commands:
   import    Convert supported source formats to Loadwright specs
   validate  Validate a YAML spec without compiling or running JMeter
   compile   Compile a YAML spec to JMeter JMX
-  run       Run a YAML spec or existing JMX through Dockerized JMeter`)
+  run       Run a YAML spec or existing JMX through Dockerized JMeter
+  report    Generate reports from an existing JMeter JTL file`)
 }
 
 func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -219,6 +224,35 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	summary, err := report.ParseJTL(filepath.Join(outputDir, jtlName), thresholds)
+	if err != nil {
+		fmt.Fprintf(stderr, "parse report failed: %v\n", err)
+		return 1
+	}
+	if err := report.WriteAll(summary, outputDir); err != nil {
+		fmt.Fprintf(stderr, "write report failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "report %s\n", filepath.Join(outputDir, "index.html"))
+	if ci && !summary.Passed() {
+		fmt.Fprintln(stderr, "thresholds failed")
+		return 1
+	}
+	return 0
+}
+
+func reportCommand(args []string, stdout io.Writer, stderr io.Writer) int {
+	jtlPath, outputDir, thresholds, ci, err := parseReportArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if outputDir == "" {
+		outputDir = filepath.Dir(jtlPath)
+		if outputDir == "" {
+			outputDir = "."
+		}
+	}
+	summary, err := report.ParseJTL(jtlPath, thresholds)
 	if err != nil {
 		fmt.Fprintf(stderr, "parse report failed: %v\n", err)
 		return 1
@@ -408,6 +442,87 @@ func parseRunArgs(args []string) (input string, outputDir string, envFile string
 		return "", "", "", false, "", fmt.Errorf("run requires exactly one spec or JMX path")
 	}
 	return positional[0], outputDir, envFile, ci, image, nil
+}
+
+func parseReportArgs(args []string) (jtlPath string, outputDir string, thresholds spec.Thresholds, ci bool, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--ci":
+			ci = true
+		case arg == "--out-dir":
+			i++
+			if i >= len(args) {
+				return "", "", thresholds, false, fmt.Errorf("%s requires a value", arg)
+			}
+			outputDir = args[i]
+		case strings.HasPrefix(arg, "--out-dir="):
+			outputDir = strings.TrimPrefix(arg, "--out-dir=")
+		case arg == "--error-rate-lt":
+			i++
+			if i >= len(args) {
+				return "", "", thresholds, false, fmt.Errorf("%s requires a value", arg)
+			}
+			value, parseErr := parseThresholdValue(arg, args[i])
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.ErrorRateLT = &value
+		case strings.HasPrefix(arg, "--error-rate-lt="):
+			value, parseErr := parseThresholdValue("--error-rate-lt", strings.TrimPrefix(arg, "--error-rate-lt="))
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.ErrorRateLT = &value
+		case arg == "--p95-ms-lt":
+			i++
+			if i >= len(args) {
+				return "", "", thresholds, false, fmt.Errorf("%s requires a value", arg)
+			}
+			value, parseErr := parseThresholdValue(arg, args[i])
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.P95MsLT = &value
+		case strings.HasPrefix(arg, "--p95-ms-lt="):
+			value, parseErr := parseThresholdValue("--p95-ms-lt", strings.TrimPrefix(arg, "--p95-ms-lt="))
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.P95MsLT = &value
+		case arg == "--avg-ms-lt":
+			i++
+			if i >= len(args) {
+				return "", "", thresholds, false, fmt.Errorf("%s requires a value", arg)
+			}
+			value, parseErr := parseThresholdValue(arg, args[i])
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.AvgMsLT = &value
+		case strings.HasPrefix(arg, "--avg-ms-lt="):
+			value, parseErr := parseThresholdValue("--avg-ms-lt", strings.TrimPrefix(arg, "--avg-ms-lt="))
+			if parseErr != nil {
+				return "", "", thresholds, false, parseErr
+			}
+			thresholds.AvgMsLT = &value
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 1 {
+		return "", "", thresholds, false, fmt.Errorf("report requires exactly one JTL path")
+	}
+	return positional[0], outputDir, thresholds, ci, nil
+}
+
+func parseThresholdValue(flag string, raw string) (float64, error) {
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative number", flag)
+	}
+	return value, nil
 }
 
 func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL string, err error) {

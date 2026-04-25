@@ -28,6 +28,7 @@ bin/loadwright compile examples/api/basic.yaml -o /tmp/loadwright-basic.jmx
 
 ```bash
 bin/loadwright run examples/api/query-params.yaml --out-dir results/release-smoke --ci
+bin/loadwright report results/release-smoke/results.jtl --out-dir results/release-smoke --error-rate-lt 1 --p95-ms-lt 3000 --ci
 ```
 
 - Confirm docs and examples match the released behavior.

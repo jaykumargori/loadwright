@@ -40,6 +40,7 @@ Run a real JMeter smoke test before cutting a release:
 
 ```bash
 bin/loadwright run examples/api/query-params.yaml --out-dir results/manual-smoke --ci
+bin/loadwright report results/manual-smoke/results.jtl --out-dir /tmp/loadwright-report --error-rate-lt 1 --p95-ms-lt 3000 --ci
 ```
 
 ## Current Coverage Focus

@@ -23,3 +23,4 @@
 - Add release checklist, realistic checkout example, and pre-release hardening tests.
 - Add `loadwright validate` for fast no-Docker spec checks.
 - Add GitHub issue/PR templates and compatibility policy.
+- Add `loadwright report` for regenerating reports from existing JTL files.

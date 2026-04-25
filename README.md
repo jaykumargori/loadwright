@@ -101,6 +101,7 @@ loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--ba
 loadwright validate <spec.yaml> [--env-file .env.test]
 loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
 loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
+loadwright report <results.jtl> [--out-dir results/report] [--error-rate-lt 1] [--p95-ms-lt 3000] [--avg-ms-lt 1000] [--ci]
 ```
 
 `doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.

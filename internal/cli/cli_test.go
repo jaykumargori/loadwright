@@ -80,6 +80,44 @@ func TestParseRunArgsErrors(t *testing.T) {
 	}
 }
 
+func TestParseReportArgs(t *testing.T) {
+	jtlPath, outputDir, thresholds, ci, err := parseReportArgs([]string{
+		"results.jtl",
+		"--out-dir=reports",
+		"--error-rate-lt", "1",
+		"--p95-ms-lt=500",
+		"--avg-ms-lt", "250",
+		"--ci",
+	})
+	if err != nil {
+		t.Fatalf("parseReportArgs() error = %v", err)
+	}
+	if jtlPath != "results.jtl" || outputDir != "reports" || !ci {
+		t.Fatalf("unexpected args: jtl=%q out=%q ci=%v", jtlPath, outputDir, ci)
+	}
+	if thresholds.ErrorRateLT == nil || *thresholds.ErrorRateLT != 1 {
+		t.Fatalf("unexpected error threshold: %+v", thresholds.ErrorRateLT)
+	}
+	if thresholds.P95MsLT == nil || *thresholds.P95MsLT != 500 {
+		t.Fatalf("unexpected p95 threshold: %+v", thresholds.P95MsLT)
+	}
+	if thresholds.AvgMsLT == nil || *thresholds.AvgMsLT != 250 {
+		t.Fatalf("unexpected avg threshold: %+v", thresholds.AvgMsLT)
+	}
+}
+
+func TestParseReportArgsErrors(t *testing.T) {
+	if _, _, _, _, err := parseReportArgs([]string{}); err == nil {
+		t.Fatalf("expected missing JTL path error")
+	}
+	if _, _, _, _, err := parseReportArgs([]string{"results.jtl", "--p95-ms-lt"}); err == nil {
+		t.Fatalf("expected missing threshold value error")
+	}
+	if _, _, _, _, err := parseReportArgs([]string{"results.jtl", "--avg-ms-lt=-1"}); err == nil {
+		t.Fatalf("expected negative threshold error")
+	}
+}
+
 func TestParseDoctorArgs(t *testing.T) {
 	deep, image, err := parseDoctorArgs([]string{"--deep", "--image=custom:jmeter"})
 	if err != nil {
@@ -274,6 +312,51 @@ func TestRunImportRejectsUnsupportedSource(t *testing.T) {
 	code := Run([]string{"import", "postman", "collection.json"}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "unsupported import source") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestRunReportCreatesArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	jtl := `timeStamp,elapsed,label,responseCode,success
+1,100,GET /health,200,true
+2,200,GET /health,200,true
+`
+	if err := os.WriteFile("results.jtl", []byte(jtl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"report", "results.jtl", "--out-dir", "report-out", "--error-rate-lt=1", "--p95-ms-lt=500", "--ci"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(report) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	for _, name := range []string{"summary.json", "summary.md", "index.html"} {
+		if _, err := os.Stat(filepath.Join("report-out", name)); err != nil {
+			t.Fatalf("expected %s: %v", name, err)
+		}
+	}
+	if !strings.Contains(stdout.String(), filepath.Join("report-out", "index.html")) {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestRunReportFailsCIOnThresholds(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	jtl := `timeStamp,elapsed,label,responseCode,success
+1,100,GET /health,200,true
+2,1000,GET /health,500,false
+`
+	if err := os.WriteFile("results.jtl", []byte(jtl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"report", "results.jtl", "--out-dir", "report-out", "--error-rate-lt", "1", "--ci"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "thresholds failed") {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join("report-out", "summary.json")); err != nil {
+		t.Fatalf("expected report artifacts despite failed thresholds: %v", err)
 	}
 }
 

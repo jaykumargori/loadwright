@@ -20,6 +20,12 @@ Use `validate` in fast pull request jobs when you want spec checks without start
 bin/loadwright validate loadwright.yaml --env-file .env.ci
 ```
 
+Use `report` when another JMeter job already produced a JTL file:
+
+```bash
+bin/loadwright report results.jtl --out-dir results/report --error-rate-lt 1 --p95-ms-lt 3000 --ci
+```
+
 The command exits with:
 
 - `0` when JMeter runs successfully and thresholds pass

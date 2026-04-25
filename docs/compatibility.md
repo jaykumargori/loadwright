@@ -34,6 +34,7 @@ Docker is not required for:
 - `loadwright validate`
 - `loadwright compile`
 - `loadwright import openapi`
+- `loadwright report`
 
 ## Spec Stability
 
