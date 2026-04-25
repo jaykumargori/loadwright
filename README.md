@@ -2,9 +2,9 @@
 
 Docker-first, spec-driven JMeter automation.
 
-loadwright turns readable YAML specs into portable JMeter `.jmx` test plans, runs them through Dockerized JMeter, and emits reports that work well locally and in CI.
+Loadwright turns readable YAML specs into portable JMeter `.jmx` test plans, runs them through Dockerized JMeter, and emits JSON, Markdown, HTML, and JUnit reports for local development and CI.
 
-This repository still contains the original Python prototype as reference code. The public OSS direction is the Go CLI under `cmd/` and `internal/`.
+It is not a new load-testing engine. It is a small automation layer that keeps JMeter compatibility while making common API load-test workflows easier to review, run, and ship.
 
 ## Why This Exists
 
@@ -14,9 +14,12 @@ Use Loadwright when you want:
 
 - a readable YAML source of truth for load tests
 - Dockerized JMeter runs without local JMeter setup
-- JSON, Markdown, and HTML summaries
+- JSON, Markdown, HTML, and JUnit summaries
 - CI pass/fail thresholds
+- OpenAPI-to-spec bootstrapping for simple API tests
 - future optional AI assistance without depending on AI for normal runs
+
+Current `v0.1.0` scope: HTTP API load tests. See [docs/limitations.md](docs/limitations.md) for known limits.
 
 ## Install From Source
 
@@ -37,8 +40,9 @@ bin/loadwright init
 Or use the included example:
 
 ```bash
-bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
+bin/loadwright doctor
 bin/loadwright validate examples/api/basic.yaml
+bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
 bin/loadwright run examples/api/basic.yaml --ci
 ```
 
@@ -91,6 +95,7 @@ More docs:
 - [Testing](docs/testing.md)
 - [Release checklist](docs/release.md)
 - [Compatibility](docs/compatibility.md)
+- [Limitations](docs/limitations.md)
 
 ## Commands
 
@@ -120,6 +125,7 @@ See [ROADMAP.md](ROADMAP.md). The short version:
 
 ```bash
 go test ./...
+go vet ./...
 ```
 
 ## Releases

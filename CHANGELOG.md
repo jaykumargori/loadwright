@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0
+## 0.1.0 - 2026-04-25
 
 - Start Go-first OSS implementation.
 - Add roadmap.
@@ -25,3 +25,4 @@
 - Add GitHub issue/PR templates and compatibility policy.
 - Add `loadwright report` for regenerating reports from existing JTL files.
 - Add CI-friendly `junit.xml` report output.
+- Document the `v0.1.0` HTTP API testing scope and known limitations.
