@@ -1,0 +1,8 @@
+.git
+bin
+dist
+results
+tests
+legacy
+*.jtl
+*.log

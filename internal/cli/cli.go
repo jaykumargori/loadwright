@@ -13,6 +13,7 @@ import (
 	"github.com/devaryakjha/loadwright/internal/report"
 	"github.com/devaryakjha/loadwright/internal/runtime"
 	"github.com/devaryakjha/loadwright/internal/spec"
+	"github.com/devaryakjha/loadwright/internal/version"
 )
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -23,6 +24,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "help", "-h", "--help":
 		usage(stdout)
+		return 0
+	case "version", "--version":
+		fmt.Fprintln(stdout, version.String())
 		return 0
 	case "doctor":
 		return doctor(args[1:], stdout, stderr)
@@ -46,6 +50,7 @@ func usage(w io.Writer) {
 
 Usage:
   loadwright doctor [--deep] [--image justb4/jmeter:latest]
+  loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
@@ -53,6 +58,7 @@ Usage:
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
+  version   Print version information
   init      Write a starter YAML spec
   import    Convert supported source formats to Loadwright specs
   compile   Compile a YAML spec to JMeter JMX

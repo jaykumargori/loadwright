@@ -80,6 +80,7 @@ See [docs/spec-reference.md](docs/spec-reference.md) for the current spec format
 More docs:
 
 - [Getting started](docs/getting-started.md)
+- [Install](docs/install.md)
 - [Examples](docs/examples.md)
 - [OpenAPI import](docs/openapi-import.md)
 - [Data sources](docs/data-sources.md)
@@ -112,6 +113,10 @@ See [ROADMAP.md](ROADMAP.md). The short version:
 ```bash
 go test ./...
 ```
+
+## Releases
+
+Tagged releases are built with GoReleaser and publish cross-platform binaries plus checksums. See [docs/install.md](docs/install.md).
 
 ## License
 

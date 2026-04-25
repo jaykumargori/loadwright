@@ -1,0 +1,84 @@
+version: 2
+
+project_name: loadwright
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: loadwright
+    main: ./cmd/loadwright
+    binary: loadwright
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/devaryakjha/loadwright/internal/version.Version={{.Version}}
+      - -X github.com/devaryakjha/loadwright/internal/version.Commit={{.Commit}}
+      - -X github.com/devaryakjha/loadwright/internal/version.Date={{.Date}}
+
+archives:
+  - id: default
+    ids:
+      - loadwright
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - docs/*
+      - examples/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+dockers_v2:
+  - ids:
+      - loadwright
+    images:
+      - "ghcr.io/devaryakjha/loadwright"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.description": "Spec-driven JMeter automation"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.source": "https://github.com/devaryakjha/loadwright"
+      "org.opencontainers.image.title": "Loadwright"
+      "org.opencontainers.image.version": "{{ .Version }}"
+
+release:
+  github:
+    owner: devaryakjha
+    name: loadwright

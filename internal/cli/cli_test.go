@@ -18,6 +18,17 @@ func TestParseCompileArgsAcceptsFlagsAfterSpec(t *testing.T) {
 	}
 }
 
+func TestRunVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(version) code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Loadwright") {
+		t.Fatalf("version output = %q", stdout.String())
+	}
+}
+
 func TestParseCompileArgsErrors(t *testing.T) {
 	if _, _, _, err := parseCompileArgs([]string{"spec.yaml", "-o"}); err == nil {
 		t.Fatalf("expected missing output value error")
