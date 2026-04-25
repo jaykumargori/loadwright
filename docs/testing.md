@@ -52,3 +52,4 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir /tmp/loadwright
 - CLI parsing, non-Docker command flows, and end-to-end run/report generation with a Docker shim.
 - OpenAPI import for YAML, JSON, path/query params, request bodies, and error cases.
 - Runtime helper behavior for doctor/version parsing.
+
