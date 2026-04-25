@@ -12,6 +12,7 @@
 - Add latest-run metadata for default `loadwright run` result directories.
 - Add `loadwright compare` for Markdown comparisons between two `summary.json` files.
 - Add per-run `run.json` metadata manifests.
+- Import basic OpenAPI HTTP bearer/basic security schemes.
 
 ## 0.1.0 - 2026-04-25
 
