@@ -145,7 +145,7 @@ Tagged releases are built with GoReleaser and publish cross-platform binaries pl
 
 ## Credits
 
-The initial experimental prototype that led to this project was built by [Jay Kumar Gori](https://github.com/jaykumargori). The public OSS implementation is the Go CLI in this repository.
+The initial experimental prototype that led to this project was built by [Jaykumar Gori](https://github.com/jaykumargori). The public OSS implementation is the Go CLI in this repository.
 
 ## License
 

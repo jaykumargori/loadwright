@@ -29,4 +29,4 @@ AI features are welcome only when they produce reviewable specs, explanations, o
 
 ## Attribution
 
-The initial experimental prototype that inspired Loadwright was built by [Jay Kumar Gori](https://github.com/jaykumargori). Public contributors should keep attribution intact in README-facing project materials.
+The initial experimental prototype that inspired Loadwright was built by [Jaykumar Gori](https://github.com/jaykumargori). Public contributors should keep attribution intact in README-facing project materials.
