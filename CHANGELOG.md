@@ -9,3 +9,6 @@
 - Add Dockerized JMeter run command.
 - Add JSON, Markdown, and HTML report generation.
 - Add initial tests, docs, and CI workflow.
+- Rename project to Loadwright.
+- Move the original Python prototype under `legacy/python-prototype`.
+- Expand `doctor` with directory, image, and optional deep JMeter runtime checks.

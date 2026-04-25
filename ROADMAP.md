@@ -60,7 +60,8 @@ Goal: make the project installable, testable, and understandable.
 
 Goal: make the tool valuable for backend developers, QA engineers, and CI pipelines.
 
-- `loadwright doctor` to verify Docker, image access, writable paths, and JMeter startup.
+- `loadwright doctor` to verify Docker, image access, and writable paths.
+- `loadwright doctor --deep` to verify JMeter startup through Docker.
 - `loadwright init` to create a starter spec.
 - `loadwright compile spec.yaml --out tests/spec.jmx`.
 - `loadwright run spec.yaml --ci`.

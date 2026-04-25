@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	goruntime "runtime"
 	"strings"
 )
 
@@ -19,11 +21,30 @@ type RunOptions struct {
 	JTLName    string
 }
 
-func Doctor() []Check {
-	return []Check{
+type DoctorOptions struct {
+	Image   string
+	Deep    bool
+	WorkDir string
+}
+
+func Doctor(options DoctorOptions) []Check {
+	if options.Image == "" {
+		options.Image = DefaultJMeterImage
+	}
+	if options.WorkDir == "" {
+		options.WorkDir = "."
+	}
+	checks := []Check{
 		checkCommand("docker", "Docker CLI"),
 		checkDocker(),
+		checkWritableDir(filepath.Join(options.WorkDir, "tests"), "tests directory"),
+		checkWritableDir(filepath.Join(options.WorkDir, "results"), "results directory"),
+		checkImage(options.Image),
 	}
+	if options.Deep {
+		checks = append(checks, checkJMeterRuntime(options.Image))
+	}
+	return checks
 }
 
 type Check struct {
@@ -88,6 +109,64 @@ func checkDocker() Check {
 		return Check{Name: "Docker daemon", Passed: false, Message: "docker daemon is not reachable"}
 	}
 	return Check{Name: "Docker daemon", Passed: true, Message: "server " + stringTrim(output)}
+}
+
+func checkWritableDir(path string, name string) Check {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return Check{Name: name, Passed: false, Message: err.Error()}
+	}
+	probe, err := os.CreateTemp(path, ".loadwright-doctor-*")
+	if err != nil {
+		return Check{Name: name, Passed: false, Message: "not writable: " + err.Error()}
+	}
+	probePath := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(probePath)
+	return Check{Name: name, Passed: true, Message: "writable"}
+}
+
+func checkImage(image string) Check {
+	cmd := exec.Command("docker", "image", "inspect", image, "--format", "{{.Architecture}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return Check{Name: "JMeter image", Passed: true, Message: image + " not local; Docker will pull it on first run"}
+	}
+	arch := stringTrim(output)
+	message := image + " available"
+	if arch != "" && arch != goruntime.GOARCH {
+		message += fmt.Sprintf(" (%s image on %s host; Docker may use emulation)", arch, goruntime.GOARCH)
+	}
+	return Check{Name: "JMeter image", Passed: true, Message: message}
+}
+
+func checkJMeterRuntime(image string) Check {
+	cmd := exec.Command("docker", "run", "--rm", image, "--version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return Check{Name: "JMeter runtime", Passed: false, Message: err.Error()}
+	}
+	version := firstVersionLine(string(output))
+	if version == "" {
+		version = "started successfully"
+	}
+	return Check{Name: "JMeter runtime", Passed: true, Message: version}
+}
+
+func firstVersionLine(output string) string {
+	versionPattern := regexp.MustCompile(`\b([0-9]+\.[0-9]+(?:\.[0-9]+)?)\b`)
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "Apache JMeter") || strings.HasPrefix(trimmed, "Version ") {
+			return trimmed
+		}
+		if strings.Contains(trimmed, "____") {
+			matches := versionPattern.FindStringSubmatch(trimmed)
+			if len(matches) > 1 {
+				return "Apache JMeter " + matches[1]
+			}
+		}
+	}
+	return ""
 }
 
 func mustRel(base, target string) string {

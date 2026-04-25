@@ -41,6 +41,13 @@ bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
 bin/loadwright run examples/api/basic.yaml --ci
 ```
 
+Check local prerequisites:
+
+```bash
+bin/loadwright doctor
+bin/loadwright doctor --deep
+```
+
 Reports are written to `results/<run-id>/`:
 
 - `results.jtl`
@@ -73,11 +80,13 @@ See [docs/spec-reference.md](docs/spec-reference.md) for the current spec format
 ## Commands
 
 ```bash
-loadwright doctor
+loadwright doctor [--deep] [--image justb4/jmeter:latest]
 loadwright init [path]
 loadwright compile <spec.yaml> [-o tests/name.jmx]
 loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
 ```
+
+`doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.
 
 ## Roadmap
 

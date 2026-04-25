@@ -21,3 +21,13 @@ func TestParseRunArgsAcceptsInterspersedFlags(t *testing.T) {
 		t.Fatalf("unexpected args: input=%q outputDir=%q ci=%v image=%q", input, outputDir, ci, image)
 	}
 }
+
+func TestParseDoctorArgs(t *testing.T) {
+	deep, image, err := parseDoctorArgs([]string{"--deep", "--image=custom:jmeter"})
+	if err != nil {
+		t.Fatalf("parseDoctorArgs() error = %v", err)
+	}
+	if !deep || image != "custom:jmeter" {
+		t.Fatalf("unexpected args: deep=%v image=%q", deep, image)
+	}
+}

@@ -24,7 +24,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		usage(stdout)
 		return 0
 	case "doctor":
-		return doctor(stdout)
+		return doctor(args[1:], stdout, stderr)
 	case "init":
 		return initSpec(args[1:], stdout, stderr)
 	case "compile":
@@ -42,7 +42,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `Loadwright: Docker-first, spec-driven JMeter automation
 
 Usage:
-  loadwright doctor
+  loadwright doctor [--deep] [--image justb4/jmeter:latest]
   loadwright init [path]
   loadwright compile <spec.yaml> [-o tests/name.jmx]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
@@ -54,9 +54,14 @@ Commands:
   run       Run a YAML spec or existing JMX through Dockerized JMeter`)
 }
 
-func doctor(stdout io.Writer) int {
+func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
+	deep, image, err := parseDoctorArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
 	failed := false
-	for _, check := range runtime.Doctor() {
+	for _, check := range runtime.Doctor(runtime.DoctorOptions{Deep: deep, Image: image}) {
 		status := "PASS"
 		if !check.Passed {
 			status = "FAIL"
@@ -68,6 +73,28 @@ func doctor(stdout io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func parseDoctorArgs(args []string) (deep bool, image string, err error) {
+	image = runtime.DefaultJMeterImage
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--deep":
+			deep = true
+		case arg == "--image":
+			i++
+			if i >= len(args) {
+				return false, "", fmt.Errorf("%s requires a value", arg)
+			}
+			image = args[i]
+		case strings.HasPrefix(arg, "--image="):
+			image = strings.TrimPrefix(arg, "--image=")
+		default:
+			return false, "", fmt.Errorf("unknown doctor option: %s", arg)
+		}
+	}
+	return deep, image, nil
 }
 
 func initSpec(args []string, stdout io.Writer, stderr io.Writer) int {
