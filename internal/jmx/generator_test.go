@@ -173,3 +173,47 @@ func TestRenderTimeouts(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderCSVDataSet(t *testing.T) {
+	loops := 1
+	recycle := false
+	stopThread := true
+	loaded := &spec.Spec{
+		Name:   "csv",
+		Target: "https://example.com",
+		Data: map[string]spec.DataSet{
+			"users": {
+				File:       "users.csv",
+				Variables:  []string{"username", "password"},
+				Recycle:    &recycle,
+				StopThread: &stopThread,
+				Sharing:    "thread",
+			},
+		},
+		Load: spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:   "login",
+			Method: "POST",
+			Path:   "/login",
+			Body: map[string]any{
+				"username": "${username}",
+				"password": "${password}",
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="users" enabled="true">`,
+		`<stringProp name="filename">users.csv</stringProp>`,
+		`<stringProp name="variableNames">username,password</stringProp>`,
+		`<boolProp name="ignoreFirstLine">true</boolProp>`,
+		`<boolProp name="recycle">false</boolProp>`,
+		`<boolProp name="stopThread">true</boolProp>`,
+		`<stringProp name="shareMode">Current thread</stringProp>`,
+		`${username}`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("CSV JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}

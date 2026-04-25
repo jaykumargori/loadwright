@@ -40,6 +40,7 @@ func Render(s *spec.Spec) string {
 	b.WriteString("    <hashTree>\n")
 	writeThreadGroup(&b, s)
 	b.WriteString("      <hashTree>\n")
+	writeDataSets(&b, s)
 	for _, request := range s.Requests {
 		writeHTTPSampler(&b, s, request)
 	}
@@ -48,6 +49,24 @@ func Render(s *spec.Spec) string {
 	b.WriteString("  </hashTree>\n")
 	b.WriteString("</jmeterTestPlan>\n")
 	return b.String()
+}
+
+func writeDataSets(b *strings.Builder, s *spec.Spec) {
+	for _, name := range sortedDataSetNames(s.Data) {
+		dataSet := s.Data[name]
+		fmt.Fprintf(b, `        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="%s" enabled="true">`+"\n", esc(name))
+		fmt.Fprintf(b, "          <stringProp name=\"filename\">%s</stringProp>\n", esc(dataSet.File))
+		fmt.Fprintf(b, "          <stringProp name=\"fileEncoding\">UTF-8</stringProp>\n")
+		fmt.Fprintf(b, "          <stringProp name=\"variableNames\">%s</stringProp>\n", esc(strings.Join(dataSet.Variables, ",")))
+		fmt.Fprintf(b, "          <boolProp name=\"ignoreFirstLine\">true</boolProp>\n")
+		fmt.Fprintf(b, "          <stringProp name=\"delimiter\">,</stringProp>\n")
+		fmt.Fprintf(b, "          <boolProp name=\"quotedData\">false</boolProp>\n")
+		fmt.Fprintf(b, "          <boolProp name=\"recycle\">%s</boolProp>\n", boolString(dataSet.Recycle, true))
+		fmt.Fprintf(b, "          <boolProp name=\"stopThread\">%s</boolProp>\n", boolString(dataSet.StopThread, false))
+		fmt.Fprintf(b, "          <stringProp name=\"shareMode\">%s</stringProp>\n", esc(shareMode(dataSet.Sharing)))
+		b.WriteString("        </CSVDataSet>\n")
+		b.WriteString("        <hashTree/>\n")
+	}
 }
 
 func writeTestPlan(b *strings.Builder, s *spec.Spec) {
@@ -233,4 +252,37 @@ func sortedKeys(values map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func sortedDataSetNames(values map[string]spec.DataSet) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func boolString(value *bool, defaultValue bool) string {
+	if value == nil {
+		if defaultValue {
+			return "true"
+		}
+		return "false"
+	}
+	if *value {
+		return "true"
+	}
+	return "false"
+}
+
+func shareMode(value string) string {
+	switch value {
+	case "thread":
+		return "Current thread"
+	case "group":
+		return "Current thread group"
+	default:
+		return "All threads"
+	}
 }

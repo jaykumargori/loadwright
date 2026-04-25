@@ -27,6 +27,7 @@ thresholds:
 - `variables`: optional map of template variables.
 - `defaults.timeout`: optional default request timeout.
 - `auth`: optional global auth helper.
+- `data`: optional CSV data sources.
 - `load.users`: concurrent JMeter threads. Defaults to `1`.
 - `load.ramp_up`: ramp-up duration. Supports seconds as an integer or strings like `30s`, `5m`, `1h`.
 - `load.loops`: number of loops per user.
@@ -98,6 +99,21 @@ requests:
 ```
 
 Loadwright renders the timeout into JMeter connect and response timeout fields in milliseconds.
+
+## Data Sources
+
+CSV data sources are declared under `data`.
+
+```yaml
+data:
+  users:
+    file: users.csv
+    recycle: true
+    stop_thread: false
+    sharing: all
+```
+
+When `variables` is omitted, Loadwright reads the CSV header row. Use CSV columns in requests with JMeter runtime variables such as `${username}`.
 
 ## Thresholds
 

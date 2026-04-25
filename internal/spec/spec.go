@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -78,14 +79,15 @@ func ParseDuration(raw any) (int, error) {
 }
 
 type Spec struct {
-	Name       string            `yaml:"name"`
-	Target     string            `yaml:"target"`
-	Variables  map[string]string `yaml:"variables,omitempty"`
-	Defaults   Defaults          `yaml:"defaults,omitempty"`
-	Auth       Auth              `yaml:"auth,omitempty"`
-	Load       Load              `yaml:"load"`
-	Requests   []Request         `yaml:"requests"`
-	Thresholds Thresholds        `yaml:"thresholds,omitempty"`
+	Name       string             `yaml:"name"`
+	Target     string             `yaml:"target"`
+	Variables  map[string]string  `yaml:"variables,omitempty"`
+	Defaults   Defaults           `yaml:"defaults,omitempty"`
+	Auth       Auth               `yaml:"auth,omitempty"`
+	Data       map[string]DataSet `yaml:"data,omitempty"`
+	Load       Load               `yaml:"load"`
+	Requests   []Request          `yaml:"requests"`
+	Thresholds Thresholds         `yaml:"thresholds,omitempty"`
 }
 
 type Defaults struct {
@@ -101,6 +103,14 @@ type Load struct {
 	RampUp   Duration `yaml:"ramp_up,omitempty"`
 	Duration Duration `yaml:"duration,omitempty"`
 	Loops    *int     `yaml:"loops,omitempty"`
+}
+
+type DataSet struct {
+	File       string   `yaml:"file"`
+	Variables  []string `yaml:"variables,omitempty"`
+	Recycle    *bool    `yaml:"recycle,omitempty"`
+	StopThread *bool    `yaml:"stop_thread,omitempty"`
+	Sharing    string   `yaml:"sharing,omitempty"`
 }
 
 type Request struct {
@@ -141,7 +151,7 @@ func LoadFile(path string) (*Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := parsed.NormalizeAndValidate(); err != nil {
+	if err := parsed.NormalizeAndValidate(WithBaseDir(filepath.Dir(path))); err != nil {
 		return nil, err
 	}
 	return parsed, nil
@@ -159,7 +169,23 @@ func LoadFileUnresolved(path string) (*Spec, error) {
 	return &parsed, nil
 }
 
-func (s *Spec) NormalizeAndValidate() error {
+type NormalizeOption func(*normalizeOptions)
+
+type normalizeOptions struct {
+	baseDir string
+}
+
+func WithBaseDir(path string) NormalizeOption {
+	return func(options *normalizeOptions) {
+		options.baseDir = path
+	}
+}
+
+func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
+	options := normalizeOptions{baseDir: "."}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	s.Name = strings.TrimSpace(s.Name)
 	if s.Name == "" {
 		return errors.New("name is required")
@@ -177,6 +203,15 @@ func (s *Spec) NormalizeAndValidate() error {
 	}
 	if err := s.Auth.NormalizeAndValidate("auth"); err != nil {
 		return err
+	}
+	if s.Data == nil {
+		s.Data = map[string]DataSet{}
+	}
+	for name, dataSet := range s.Data {
+		if err := dataSet.NormalizeAndValidate(name, options.baseDir); err != nil {
+			return err
+		}
+		s.Data[name] = dataSet
 	}
 	if s.Load.Users == 0 {
 		s.Load.Users = 1
@@ -237,6 +272,39 @@ func (r *Request) NormalizeAndValidate(index int) error {
 	return nil
 }
 
+func (d *DataSet) NormalizeAndValidate(name string, baseDir string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("data source name is required")
+	}
+	d.File = strings.TrimSpace(d.File)
+	if d.File == "" {
+		return fmt.Errorf("data.%s.file is required", name)
+	}
+	if d.Sharing == "" {
+		d.Sharing = "all"
+	}
+	switch d.Sharing {
+	case "all", "thread", "group":
+	default:
+		return fmt.Errorf("data.%s.sharing must be one of: all, thread, group", name)
+	}
+	if len(d.Variables) == 0 {
+		headers, err := ReadCSVHeader(filepath.Join(baseDir, d.File))
+		if err != nil {
+			return fmt.Errorf("data.%s.file: %w", name, err)
+		}
+		d.Variables = headers
+	}
+	for index, variable := range d.Variables {
+		variable = strings.TrimSpace(variable)
+		if variable == "" {
+			return fmt.Errorf("data.%s.variables[%d] is empty", name, index)
+		}
+		d.Variables[index] = variable
+	}
+	return nil
+}
+
 func (a *Auth) NormalizeAndValidate(path string) error {
 	a.Type = strings.ToLower(strings.TrimSpace(a.Type))
 	if a.Type == "" {
@@ -257,7 +325,7 @@ func (a *Auth) NormalizeAndValidate(path string) error {
 	return nil
 }
 
-func (s *Spec) Resolve(env map[string]string) (*Spec, error) {
+func (s *Spec) Resolve(env map[string]string, opts ...NormalizeOption) (*Spec, error) {
 	if env == nil {
 		env = map[string]string{}
 	}
@@ -294,7 +362,7 @@ func (s *Spec) Resolve(env map[string]string) (*Spec, error) {
 		}
 		resolved.Requests[index] = resolvedRequest
 	}
-	if err := resolved.NormalizeAndValidate(); err != nil {
+	if err := resolved.NormalizeAndValidate(opts...); err != nil {
 		return nil, err
 	}
 	resolved.applyAuthHeaders()
@@ -367,10 +435,7 @@ var templatePattern = regexp.MustCompile(`\{\{[[:space:]]*([A-Za-z_][A-Za-z0-9_]
 var envPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 func renderString(value string, vars map[string]string) (string, error) {
-	rendered, err := renderEnvRefs(value, vars)
-	if err != nil {
-		return "", err
-	}
+	rendered := value
 	var missing string
 	rendered = templatePattern.ReplaceAllStringFunc(rendered, func(match string) string {
 		parts := templatePattern.FindStringSubmatch(match)

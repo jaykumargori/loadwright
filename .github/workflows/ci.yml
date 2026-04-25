@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p /tmp/loadwright-examples
           find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | while read -r spec; do
-            if grep -q '\${' "$spec"; then
+            if grep -q '\${[A-Z_][A-Z0-9_]*}' "$spec"; then
               bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
             else
               bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"

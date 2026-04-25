@@ -18,3 +18,4 @@
 - Add variables, env files, bearer/basic auth helpers, and request timeouts.
 - Add initial OpenAPI 3.x import support.
 - Expand test coverage across CLI, spec, report, runtime helper, and OpenAPI edge cases.
+- Add CSV data source support backed by JMeter `CSVDataSet`.

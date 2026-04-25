@@ -27,6 +27,7 @@ wheels/
 results/
 *.jtl
 *.csv
+!examples/**/*.csv
 *.log
 
 # IDE

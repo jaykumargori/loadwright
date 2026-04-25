@@ -1,0 +1,26 @@
+name: csv-users-example
+target: https://httpbin.org
+data:
+  users:
+    file: users.csv
+    recycle: true
+    stop_thread: false
+    sharing: all
+load:
+  users: 2
+  ramp_up: 2s
+  loops: 2
+requests:
+  - name: post csv user
+    method: POST
+    path: /post
+    headers:
+      content-type: application/json
+    body:
+      username: ${username}
+      password: ${password}
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

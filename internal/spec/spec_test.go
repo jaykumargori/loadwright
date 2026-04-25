@@ -219,6 +219,27 @@ func TestResolveVariablesEnvAndBearerAuth(t *testing.T) {
 	}
 }
 
+func TestResolvePreservesJMeterRuntimeVariables(t *testing.T) {
+	raw := Spec{
+		Name:   "csv",
+		Target: "https://example.com",
+		Requests: []Request{{
+			Path: "/login",
+			Body: map[string]any{
+				"username": "${username}",
+			},
+		}},
+	}
+	resolved, err := raw.Resolve(nil)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	body := resolved.Requests[0].Body.(map[string]any)
+	if body["username"] != "${username}" {
+		t.Fatalf("runtime variable was not preserved: %+v", body)
+	}
+}
+
 func TestResolveBasicAuthAndExistingAuthorizationHeader(t *testing.T) {
 	raw := Spec{
 		Name:   "basic",
@@ -331,6 +352,57 @@ func TestDefaultTimeoutAppliesToRequests(t *testing.T) {
 	}
 	if raw.Requests[0].Timeout.Seconds != 5 || raw.Requests[1].Timeout.Seconds != 2 {
 		t.Fatalf("unexpected timeouts: %+v", raw.Requests)
+	}
+}
+
+func TestDataSetInfersCSVHeader(t *testing.T) {
+	dir := t.TempDir()
+	csvPath := filepath.Join(dir, "users.csv")
+	if err := os.WriteFile(csvPath, []byte("username,password\nalice,secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw := Spec{
+		Name:   "csv",
+		Target: "https://example.com",
+		Data: map[string]DataSet{
+			"users": {File: "users.csv"},
+		},
+		Requests: []Request{{Path: "/login"}},
+	}
+	if err := raw.NormalizeAndValidate(WithBaseDir(dir)); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	got := strings.Join(raw.Data["users"].Variables, ",")
+	if got != "username,password" {
+		t.Fatalf("variables = %q", got)
+	}
+	if raw.Data["users"].Sharing != "all" {
+		t.Fatalf("sharing = %q", raw.Data["users"].Sharing)
+	}
+}
+
+func TestDataSetValidationFailures(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "empty-header.csv"), []byte("username,\nalice,\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		data DataSet
+		want string
+	}{
+		{name: "missing file", data: DataSet{}, want: "file is required"},
+		{name: "bad sharing", data: DataSet{File: "missing.csv", Variables: []string{"x"}, Sharing: "everyone"}, want: "sharing"},
+		{name: "missing csv", data: DataSet{File: "missing.csv"}, want: "read CSV"},
+		{name: "empty header", data: DataSet{File: "empty-header.csv"}, want: "empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.data.NormalizeAndValidate("users", dir)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
 	}
 }
 

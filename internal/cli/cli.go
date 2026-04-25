@@ -251,7 +251,7 @@ func loadResolvedSpec(path string, envFile string) (*spec.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	return loaded.Resolve(env)
+	return loaded.Resolve(env, spec.WithBaseDir(filepath.Dir(path)))
 }
 
 func parseCompileArgs(args []string) (specPath string, output string, envFile string, err error) {

@@ -82,3 +82,11 @@ bin/loadwright compile /tmp/petstore-loadwright.yaml -o /tmp/petstore.jmx
 ```
 
 Demonstrates generating a starter Loadwright spec from OpenAPI 3.x.
+
+## CSV Users
+
+```bash
+bin/loadwright run examples/api/csv-users.yaml --ci
+```
+
+Demonstrates JMeter CSV data sources and runtime variables like `${username}`.
