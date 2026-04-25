@@ -13,6 +13,7 @@
 - Add `loadwright compare` for Markdown comparisons between two `summary.json` files.
 - Add per-run `run.json` metadata manifests.
 - Import basic OpenAPI HTTP bearer/basic security schemes.
+- Import Postman urlencoded and text form-data bodies as starter bodies with warnings.
 
 ## 0.1.0 - 2026-04-25
 
