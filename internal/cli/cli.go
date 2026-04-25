@@ -44,8 +44,8 @@ func usage(w io.Writer) {
 Usage:
   loadwright doctor [--deep] [--image justb4/jmeter:latest]
   loadwright init [path]
-  loadwright compile <spec.yaml> [-o tests/name.jmx]
-  loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
+  loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
+  loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
@@ -115,12 +115,12 @@ func initSpec(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func compile(args []string, stdout io.Writer, stderr io.Writer) int {
-	specPath, output, err := parseCompileArgs(args)
+	specPath, output, envFile, err := parseCompileArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	loaded, err := spec.LoadFile(specPath)
+	loaded, err := loadResolvedSpec(specPath, envFile)
 	if err != nil {
 		fmt.Fprintf(stderr, "invalid spec: %v\n", err)
 		return 1
@@ -138,7 +138,7 @@ func compile(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
-	input, outputDir, ci, image, err := parseRunArgs(args)
+	input, outputDir, envFile, ci, image, err := parseRunArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -156,7 +156,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	jmxPath := input
 	workDir := "."
 	if isYAML(input) {
-		loaded, err := spec.LoadFile(input)
+		loaded, err := loadResolvedSpec(input, envFile)
 		if err != nil {
 			fmt.Fprintf(stderr, "invalid spec: %v\n", err)
 			return 1
@@ -201,7 +201,19 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func parseCompileArgs(args []string) (specPath string, output string, err error) {
+func loadResolvedSpec(path string, envFile string) (*spec.Spec, error) {
+	env, err := spec.LoadEnvFile(envFile)
+	if err != nil {
+		return nil, err
+	}
+	loaded, err := spec.LoadFileUnresolved(path)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Resolve(env)
+}
+
+func parseCompileArgs(args []string) (specPath string, output string, envFile string, err error) {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -209,24 +221,32 @@ func parseCompileArgs(args []string) (specPath string, output string, err error)
 		case arg == "-o" || arg == "--out":
 			i++
 			if i >= len(args) {
-				return "", "", fmt.Errorf("%s requires a value", arg)
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
 			}
 			output = args[i]
 		case strings.HasPrefix(arg, "-o="):
 			output = strings.TrimPrefix(arg, "-o=")
 		case strings.HasPrefix(arg, "--out="):
 			output = strings.TrimPrefix(arg, "--out=")
+		case arg == "--env-file":
+			i++
+			if i >= len(args) {
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			envFile = args[i]
+		case strings.HasPrefix(arg, "--env-file="):
+			envFile = strings.TrimPrefix(arg, "--env-file=")
 		default:
 			positional = append(positional, arg)
 		}
 	}
 	if len(positional) != 1 {
-		return "", "", fmt.Errorf("compile requires exactly one spec path")
+		return "", "", "", fmt.Errorf("compile requires exactly one spec path")
 	}
-	return positional[0], output, nil
+	return positional[0], output, envFile, nil
 }
 
-func parseRunArgs(args []string) (input string, outputDir string, ci bool, image string, err error) {
+func parseRunArgs(args []string) (input string, outputDir string, envFile string, ci bool, image string, err error) {
 	image = runtime.DefaultJMeterImage
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -237,7 +257,7 @@ func parseRunArgs(args []string) (input string, outputDir string, ci bool, image
 		case arg == "--out-dir":
 			i++
 			if i >= len(args) {
-				return "", "", false, "", fmt.Errorf("%s requires a value", arg)
+				return "", "", "", false, "", fmt.Errorf("%s requires a value", arg)
 			}
 			outputDir = args[i]
 		case strings.HasPrefix(arg, "--out-dir="):
@@ -245,19 +265,27 @@ func parseRunArgs(args []string) (input string, outputDir string, ci bool, image
 		case arg == "--image":
 			i++
 			if i >= len(args) {
-				return "", "", false, "", fmt.Errorf("%s requires a value", arg)
+				return "", "", "", false, "", fmt.Errorf("%s requires a value", arg)
 			}
 			image = args[i]
 		case strings.HasPrefix(arg, "--image="):
 			image = strings.TrimPrefix(arg, "--image=")
+		case arg == "--env-file":
+			i++
+			if i >= len(args) {
+				return "", "", "", false, "", fmt.Errorf("%s requires a value", arg)
+			}
+			envFile = args[i]
+		case strings.HasPrefix(arg, "--env-file="):
+			envFile = strings.TrimPrefix(arg, "--env-file=")
 		default:
 			positional = append(positional, arg)
 		}
 	}
 	if len(positional) != 1 {
-		return "", "", false, "", fmt.Errorf("run requires exactly one spec or JMX path")
+		return "", "", "", false, "", fmt.Errorf("run requires exactly one spec or JMX path")
 	}
-	return positional[0], outputDir, ci, image, nil
+	return positional[0], outputDir, envFile, ci, image, nil
 }
 
 func isYAML(path string) bool {

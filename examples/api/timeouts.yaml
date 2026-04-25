@@ -1,0 +1,23 @@
+name: timeout-example
+target: https://httpbin.org
+defaults:
+  timeout: 5s
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: default timeout
+    method: GET
+    path: /delay/1
+    expect:
+      status: 200
+  - name: request timeout override
+    method: GET
+    path: /delay/1
+    timeout: 2s
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 6000

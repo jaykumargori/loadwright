@@ -1,10 +1,12 @@
 package spec
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -65,11 +67,18 @@ func ParseDuration(raw any) (int, error) {
 }
 
 type Spec struct {
-	Name       string     `yaml:"name"`
-	Target     string     `yaml:"target"`
-	Load       Load       `yaml:"load"`
-	Requests   []Request  `yaml:"requests"`
-	Thresholds Thresholds `yaml:"thresholds"`
+	Name       string            `yaml:"name"`
+	Target     string            `yaml:"target"`
+	Variables  map[string]string `yaml:"variables"`
+	Defaults   Defaults          `yaml:"defaults"`
+	Auth       Auth              `yaml:"auth"`
+	Load       Load              `yaml:"load"`
+	Requests   []Request         `yaml:"requests"`
+	Thresholds Thresholds        `yaml:"thresholds"`
+}
+
+type Defaults struct {
+	Timeout Duration `yaml:"timeout"`
 }
 
 type Load struct {
@@ -86,7 +95,16 @@ type Request struct {
 	Headers map[string]string `yaml:"headers"`
 	Query   map[string]string `yaml:"query"`
 	Body    any               `yaml:"body"`
+	Auth    Auth              `yaml:"auth"`
+	Timeout Duration          `yaml:"timeout"`
 	Expect  Expect            `yaml:"expect"`
+}
+
+type Auth struct {
+	Type     string `yaml:"type"`
+	Token    string `yaml:"token"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 type Expect struct {
@@ -100,6 +118,17 @@ type Thresholds struct {
 }
 
 func LoadFile(path string) (*Spec, error) {
+	parsed, err := LoadFileUnresolved(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := parsed.NormalizeAndValidate(); err != nil {
+		return nil, err
+	}
+	return parsed, nil
+}
+
+func LoadFileUnresolved(path string) (*Spec, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read spec: %w", err)
@@ -107,9 +136,6 @@ func LoadFile(path string) (*Spec, error) {
 	var parsed Spec
 	if err := yaml.Unmarshal(data, &parsed); err != nil {
 		return nil, fmt.Errorf("parse YAML: %w", err)
-	}
-	if err := parsed.NormalizeAndValidate(); err != nil {
-		return nil, err
 	}
 	return &parsed, nil
 }
@@ -126,6 +152,12 @@ func (s *Spec) NormalizeAndValidate() error {
 	}
 	if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
 		return errors.New("target must use http or https")
+	}
+	if s.Variables == nil {
+		s.Variables = map[string]string{}
+	}
+	if err := s.Auth.NormalizeAndValidate("auth"); err != nil {
+		return err
 	}
 	if s.Load.Users == 0 {
 		s.Load.Users = 1
@@ -149,6 +181,9 @@ func (s *Spec) NormalizeAndValidate() error {
 	for index := range s.Requests {
 		if err := s.Requests[index].NormalizeAndValidate(index); err != nil {
 			return err
+		}
+		if !s.Requests[index].Timeout.Set && s.Defaults.Timeout.Set {
+			s.Requests[index].Timeout = s.Defaults.Timeout
 		}
 	}
 	return nil
@@ -177,5 +212,260 @@ func (r *Request) NormalizeAndValidate(index int) error {
 	if r.Query == nil {
 		r.Query = map[string]string{}
 	}
+	if err := r.Auth.NormalizeAndValidate(fmt.Sprintf("requests[%d].auth", index)); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (a *Auth) NormalizeAndValidate(path string) error {
+	a.Type = strings.ToLower(strings.TrimSpace(a.Type))
+	if a.Type == "" {
+		return nil
+	}
+	switch a.Type {
+	case "bearer":
+		if strings.TrimSpace(a.Token) == "" {
+			return fmt.Errorf("%s.token is required for bearer auth", path)
+		}
+	case "basic":
+		if strings.TrimSpace(a.Username) == "" {
+			return fmt.Errorf("%s.username is required for basic auth", path)
+		}
+	default:
+		return fmt.Errorf("%s.type is not supported: %s", path, a.Type)
+	}
+	return nil
+}
+
+func (s *Spec) Resolve(env map[string]string) (*Spec, error) {
+	if env == nil {
+		env = map[string]string{}
+	}
+	resolved := *s
+	resolved.Variables = copyMap(s.Variables)
+	for key, value := range resolved.Variables {
+		rendered, err := renderEnvRefs(value, env)
+		if err != nil {
+			return nil, fmt.Errorf("variables.%s: %w", key, err)
+		}
+		resolved.Variables[key] = rendered
+	}
+
+	vars := copyMap(env)
+	for key, value := range resolved.Variables {
+		vars[key] = value
+	}
+
+	var err error
+	if resolved.Name, err = renderString(s.Name, vars); err != nil {
+		return nil, fmt.Errorf("name: %w", err)
+	}
+	if resolved.Target, err = renderString(s.Target, vars); err != nil {
+		return nil, fmt.Errorf("target: %w", err)
+	}
+	if resolved.Auth, err = renderAuth(s.Auth, vars, "auth"); err != nil {
+		return nil, err
+	}
+	resolved.Requests = make([]Request, len(s.Requests))
+	for index, request := range s.Requests {
+		resolvedRequest, err := renderRequest(request, vars, index)
+		if err != nil {
+			return nil, err
+		}
+		resolved.Requests[index] = resolvedRequest
+	}
+	if err := resolved.NormalizeAndValidate(); err != nil {
+		return nil, err
+	}
+	resolved.applyAuthHeaders()
+	return &resolved, nil
+}
+
+func (s *Spec) applyAuthHeaders() {
+	for index := range s.Requests {
+		auth := s.Auth
+		if s.Requests[index].Auth.Type != "" {
+			auth = s.Requests[index].Auth
+		}
+		if auth.Type == "" || hasHeader(s.Requests[index].Headers, "authorization") {
+			continue
+		}
+		switch auth.Type {
+		case "bearer":
+			s.Requests[index].Headers["Authorization"] = "Bearer " + auth.Token
+		case "basic":
+			raw := auth.Username + ":" + auth.Password
+			s.Requests[index].Headers["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(raw))
+		}
+	}
+}
+
+func renderRequest(request Request, vars map[string]string, index int) (Request, error) {
+	var err error
+	out := request
+	if out.Name, err = renderString(request.Name, vars); err != nil {
+		return Request{}, fmt.Errorf("requests[%d].name: %w", index, err)
+	}
+	if out.Path, err = renderString(request.Path, vars); err != nil {
+		return Request{}, fmt.Errorf("requests[%d].path: %w", index, err)
+	}
+	out.Headers, err = renderStringMap(request.Headers, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].headers: %w", index, err)
+	}
+	out.Query, err = renderStringMap(request.Query, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].query: %w", index, err)
+	}
+	out.Body, err = renderAny(request.Body, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].body: %w", index, err)
+	}
+	out.Auth, err = renderAuth(request.Auth, vars, fmt.Sprintf("requests[%d].auth", index))
+	if err != nil {
+		return Request{}, err
+	}
+	return out, nil
+}
+
+func renderAuth(auth Auth, vars map[string]string, path string) (Auth, error) {
+	var err error
+	out := auth
+	if out.Token, err = renderString(auth.Token, vars); err != nil {
+		return Auth{}, fmt.Errorf("%s.token: %w", path, err)
+	}
+	if out.Username, err = renderString(auth.Username, vars); err != nil {
+		return Auth{}, fmt.Errorf("%s.username: %w", path, err)
+	}
+	if out.Password, err = renderString(auth.Password, vars); err != nil {
+		return Auth{}, fmt.Errorf("%s.password: %w", path, err)
+	}
+	return out, nil
+}
+
+var templatePattern = regexp.MustCompile(`\{\{[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*\}\}`)
+var envPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+func renderString(value string, vars map[string]string) (string, error) {
+	rendered, err := renderEnvRefs(value, vars)
+	if err != nil {
+		return "", err
+	}
+	var missing string
+	rendered = templatePattern.ReplaceAllStringFunc(rendered, func(match string) string {
+		parts := templatePattern.FindStringSubmatch(match)
+		key := parts[1]
+		value, ok := vars[key]
+		if !ok {
+			missing = key
+			return match
+		}
+		return value
+	})
+	if missing != "" {
+		return "", fmt.Errorf("missing variable %q", missing)
+	}
+	return rendered, nil
+}
+
+func renderEnvRefs(value string, env map[string]string) (string, error) {
+	var missing string
+	rendered := envPattern.ReplaceAllStringFunc(value, func(match string) string {
+		parts := envPattern.FindStringSubmatch(match)
+		key := parts[1]
+		value, ok := env[key]
+		if !ok {
+			value, ok = os.LookupEnv(key)
+		}
+		if !ok {
+			missing = key
+			return match
+		}
+		return value
+	})
+	if missing != "" {
+		return "", fmt.Errorf("missing environment value %q", missing)
+	}
+	return rendered, nil
+}
+
+func renderStringMap(values map[string]string, vars map[string]string) (map[string]string, error) {
+	out := map[string]string{}
+	for key, value := range values {
+		renderedKey, err := renderString(key, vars)
+		if err != nil {
+			return nil, err
+		}
+		renderedValue, err := renderString(value, vars)
+		if err != nil {
+			return nil, err
+		}
+		out[renderedKey] = renderedValue
+	}
+	return out, nil
+}
+
+func renderAny(value any, vars map[string]string) (any, error) {
+	switch typed := value.(type) {
+	case string:
+		return renderString(typed, vars)
+	case map[string]any:
+		out := map[string]any{}
+		for key, item := range typed {
+			renderedKey, err := renderString(key, vars)
+			if err != nil {
+				return nil, err
+			}
+			renderedValue, err := renderAny(item, vars)
+			if err != nil {
+				return nil, err
+			}
+			out[renderedKey] = renderedValue
+		}
+		return out, nil
+	case map[any]any:
+		out := map[string]any{}
+		for key, item := range typed {
+			renderedKey, err := renderString(fmt.Sprintf("%v", key), vars)
+			if err != nil {
+				return nil, err
+			}
+			renderedValue, err := renderAny(item, vars)
+			if err != nil {
+				return nil, err
+			}
+			out[renderedKey] = renderedValue
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			renderedValue, err := renderAny(item, vars)
+			if err != nil {
+				return nil, err
+			}
+			out[index] = renderedValue
+		}
+		return out, nil
+	default:
+		return value, nil
+	}
+}
+
+func copyMap(values map[string]string) map[string]string {
+	out := map[string]string{}
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func hasHeader(headers map[string]string, name string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }

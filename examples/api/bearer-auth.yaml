@@ -1,0 +1,20 @@
+name: bearer-auth-example
+target: https://httpbin.org
+variables:
+  token: ${API_TOKEN}
+auth:
+  type: bearer
+  token: "{{token}}"
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: bearer auth endpoint
+    method: GET
+    path: /bearer
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

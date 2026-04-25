@@ -149,3 +149,27 @@ func TestRenderDurationBasedLoad(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderTimeouts(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "timeouts",
+		Target: "https://example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:    "slow",
+			Method:  "GET",
+			Path:    "/slow",
+			Timeout: spec.Duration{Seconds: 2, Set: true},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<stringProp name="HTTPSampler.connect_timeout">2000</stringProp>`,
+		`<stringProp name="HTTPSampler.response_timeout">2000</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("timeout JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}

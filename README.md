@@ -89,8 +89,8 @@ More docs:
 ```bash
 loadwright doctor [--deep] [--image justb4/jmeter:latest]
 loadwright init [path]
-loadwright compile <spec.yaml> [-o tests/name.jmx]
-loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
+loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
+loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
 ```
 
 `doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.

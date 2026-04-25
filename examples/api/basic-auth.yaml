@@ -1,0 +1,22 @@
+name: basic-auth-example
+target: https://httpbin.org
+variables:
+  username: ${BASIC_USERNAME}
+  password: ${BASIC_PASSWORD}
+auth:
+  type: basic
+  username: "{{username}}"
+  password: "{{password}}"
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: basic auth endpoint
+    method: GET
+    path: /basic-auth/{{username}}/{{password}}
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

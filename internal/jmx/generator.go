@@ -124,8 +124,12 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	b.WriteString("          <boolProp name=\"HTTPSampler.use_keepalive\">true</boolProp>\n")
 	b.WriteString("          <boolProp name=\"HTTPSampler.DO_MULTIPART_POST\">false</boolProp>\n")
 	b.WriteString("          <stringProp name=\"HTTPSampler.embedded_url_re\"></stringProp>\n")
-	b.WriteString("          <stringProp name=\"HTTPSampler.connect_timeout\"></stringProp>\n")
-	b.WriteString("          <stringProp name=\"HTTPSampler.response_timeout\"></stringProp>\n")
+	timeoutMS := ""
+	if r.Timeout.Set {
+		timeoutMS = fmt.Sprintf("%d", r.Timeout.Seconds*1000)
+	}
+	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.connect_timeout\">%s</stringProp>\n", timeoutMS)
+	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.response_timeout\">%s</stringProp>\n", timeoutMS)
 	b.WriteString("        </HTTPSamplerProxy>\n")
 	b.WriteString("        <hashTree>\n")
 	if len(r.Headers) > 0 {

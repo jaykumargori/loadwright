@@ -41,3 +41,35 @@ bin/loadwright run examples/api/threshold-fail.yaml --ci
 ```
 
 Demonstrates CI failure behavior. This example intentionally uses an unrealistic p95 threshold.
+
+## Bearer Auth
+
+```bash
+API_TOKEN=demo-token bin/loadwright run examples/api/bearer-auth.yaml --ci
+```
+
+Demonstrates global bearer auth.
+
+## Basic Auth
+
+```bash
+BASIC_USERNAME=user BASIC_PASSWORD=pass bin/loadwright run examples/api/basic-auth.yaml --ci
+```
+
+Demonstrates global basic auth.
+
+## Env File
+
+```bash
+bin/loadwright run examples/api/env-file.yaml --env-file examples/api/.env.example --ci
+```
+
+Demonstrates `${ENV}` values and `{{variable}}` substitution.
+
+## Timeouts
+
+```bash
+bin/loadwright run examples/api/timeouts.yaml --ci
+```
+
+Demonstrates default and request-specific timeouts.

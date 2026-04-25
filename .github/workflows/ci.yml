@@ -21,5 +21,9 @@ jobs:
         run: |
           mkdir -p /tmp/loadwright-examples
           find examples -name '*.yaml' -print | sort | while read -r spec; do
-            bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+            if grep -q '\${' "$spec"; then
+              bin/loadwright compile "$spec" --env-file examples/api/.env.example -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+            else
+              bin/loadwright compile "$spec" -o "/tmp/loadwright-examples/$(basename "$spec" .yaml).jmx"
+            fi
           done

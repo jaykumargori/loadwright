@@ -143,3 +143,108 @@ thresholds:
 		t.Fatalf("threshold not parsed: %+v", loaded.Thresholds)
 	}
 }
+
+func TestResolveVariablesEnvAndBearerAuth(t *testing.T) {
+	raw := Spec{
+		Name:   "{{service}} smoke",
+		Target: "https://{{host}}",
+		Variables: map[string]string{
+			"service": "checkout",
+			"host":    "${API_HOST}",
+			"token":   "${API_TOKEN}",
+		},
+		Auth: Auth{Type: "bearer", Token: "{{token}}"},
+		Requests: []Request{{
+			Path: "/{{service}}/health",
+			Body: map[string]any{"service": "{{service}}"},
+		}},
+	}
+	resolved, err := raw.Resolve(map[string]string{"API_HOST": "api.example.com", "API_TOKEN": "secret"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.Name != "checkout smoke" || resolved.Target != "https://api.example.com" {
+		t.Fatalf("unexpected resolved spec: %+v", resolved)
+	}
+	if resolved.Requests[0].Path != "/checkout/health" {
+		t.Fatalf("path = %q", resolved.Requests[0].Path)
+	}
+	if got := resolved.Requests[0].Headers["Authorization"]; got != "Bearer secret" {
+		t.Fatalf("authorization = %q", got)
+	}
+	body := resolved.Requests[0].Body.(map[string]any)
+	if body["service"] != "checkout" {
+		t.Fatalf("body not resolved: %+v", body)
+	}
+}
+
+func TestResolveBasicAuthAndExistingAuthorizationHeader(t *testing.T) {
+	raw := Spec{
+		Name:   "basic",
+		Target: "https://example.com",
+		Auth:   Auth{Type: "basic", Username: "user", Password: "pass"},
+		Requests: []Request{
+			{Path: "/basic"},
+			{Path: "/custom", Headers: map[string]string{"authorization": "Bearer custom"}},
+		},
+	}
+	resolved, err := raw.Resolve(nil)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got := resolved.Requests[0].Headers["Authorization"]; got != "Basic dXNlcjpwYXNz" {
+		t.Fatalf("basic auth = %q", got)
+	}
+	if got := resolved.Requests[1].Headers["authorization"]; got != "Bearer custom" {
+		t.Fatalf("custom auth overwritten: %q", got)
+	}
+}
+
+func TestResolveMissingVariableErrors(t *testing.T) {
+	raw := Spec{
+		Name:     "missing",
+		Target:   "https://example.com",
+		Requests: []Request{{Path: "/{{missing}}"}},
+	}
+	_, err := raw.Resolve(nil)
+	if err == nil || !strings.Contains(err.Error(), "missing variable") {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+}
+
+func TestLoadEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	contents := `# comment
+API_TOKEN="quoted"
+export API_HOST=api.example.com
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	values, err := LoadEnvFile(path)
+	if err != nil {
+		t.Fatalf("LoadEnvFile() error = %v", err)
+	}
+	if values["API_TOKEN"] != "quoted" || values["API_HOST"] != "api.example.com" {
+		t.Fatalf("unexpected env values: %+v", values)
+	}
+}
+
+func TestDefaultTimeoutAppliesToRequests(t *testing.T) {
+	raw := Spec{
+		Name:     "timeouts",
+		Target:   "https://example.com",
+		Defaults: Defaults{Timeout: Duration{Seconds: 5, Set: true}},
+		Requests: []Request{
+			{Path: "/default"},
+			{Path: "/override", Timeout: Duration{Seconds: 2, Set: true}},
+		},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	if raw.Requests[0].Timeout.Seconds != 5 || raw.Requests[1].Timeout.Seconds != 2 {
+		t.Fatalf("unexpected timeouts: %+v", raw.Requests)
+	}
+}

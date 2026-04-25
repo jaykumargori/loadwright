@@ -7,6 +7,12 @@ go build -o bin/loadwright ./cmd/loadwright
 bin/loadwright run examples/api/basic.yaml --ci
 ```
 
+For environment-specific tests:
+
+```bash
+bin/loadwright run loadwright.yaml --env-file .env.ci --ci
+```
+
 The command exits with:
 
 - `0` when JMeter runs successfully and thresholds pass

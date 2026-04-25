@@ -15,3 +15,4 @@
 - Expand tests across spec validation, JMX rendering, report parsing, and CLI flows.
 - Add query-param, POST JSON, duration-load, and threshold-failure examples.
 - Add getting started, examples, CI, and reports documentation.
+- Add variables, env files, bearer/basic auth helpers, and request timeouts.

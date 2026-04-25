@@ -1,0 +1,22 @@
+name: env-file-example
+target: https://{{api_host}}
+variables:
+  api_host: ${API_HOST}
+  trace_id: ${TRACE_ID}
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: request with env values
+    method: GET
+    path: /get
+    headers:
+      x-trace-id: "{{trace_id}}"
+    query:
+      source: Loadwright
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000
