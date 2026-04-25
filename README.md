@@ -84,6 +84,7 @@ More docs:
 - [OpenAPI import](docs/openapi-import.md)
 - [CI](docs/ci.md)
 - [Reports](docs/reports.md)
+- [Testing](docs/testing.md)
 
 ## Commands
 

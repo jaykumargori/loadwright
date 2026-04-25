@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,24 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
+func TestParseDurationRejectsInvalidValues(t *testing.T) {
+	for _, input := range []any{"", "soon", 0, -1, []string{"1s"}} {
+		if _, err := ParseDuration(input); err == nil {
+			t.Fatalf("expected ParseDuration(%v) to fail", input)
+		}
+	}
+}
+
+func TestDurationMarshalYAML(t *testing.T) {
+	data, err := yaml.Marshal(Duration{Seconds: 7, Set: true})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "7s" {
+		t.Fatalf("duration YAML = %q", data)
+	}
+}
+
 func TestSpecRejectsBadTarget(t *testing.T) {
 	raw := Spec{
 		Name:     "bad",
@@ -58,6 +77,28 @@ func TestSpecRejectsBadTarget(t *testing.T) {
 	}
 	if err := raw.NormalizeAndValidate(); err == nil {
 		t.Fatalf("expected invalid target error")
+	}
+}
+
+func TestSpecValidationFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		spec Spec
+		want string
+	}{
+		{name: "missing name", spec: Spec{Target: "https://example.com", Requests: []Request{{Path: "/x"}}}, want: "name is required"},
+		{name: "bad users", spec: Spec{Name: "bad", Target: "https://example.com", Load: Load{Users: -1}, Requests: []Request{{Path: "/x"}}}, want: "load.users"},
+		{name: "bad loops", spec: Spec{Name: "bad", Target: "https://example.com", Load: Load{Loops: intPtr(0)}, Requests: []Request{{Path: "/x"}}}, want: "load.loops"},
+		{name: "no requests", spec: Spec{Name: "bad", Target: "https://example.com"}, want: "requests"},
+		{name: "bad auth", spec: Spec{Name: "bad", Target: "https://example.com", Auth: Auth{Type: "bearer"}, Requests: []Request{{Path: "/x"}}}, want: "auth.token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.spec.NormalizeAndValidate()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -212,6 +253,21 @@ func TestResolveMissingVariableErrors(t *testing.T) {
 	}
 }
 
+func TestResolveMissingEnvErrors(t *testing.T) {
+	raw := Spec{
+		Name:   "missing env",
+		Target: "https://example.com",
+		Variables: map[string]string{
+			"token": "${DOES_NOT_EXIST_FOR_LOADWRIGHT_TEST}",
+		},
+		Requests: []Request{{Path: "/x"}},
+	}
+	_, err := raw.Resolve(nil)
+	if err == nil || !strings.Contains(err.Error(), "missing environment value") {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+}
+
 func TestLoadEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")
@@ -231,6 +287,35 @@ export API_HOST=api.example.com
 	}
 }
 
+func TestLoadEnvFileRejectsBadLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("NOT_VALID\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadEnvFile(path); err == nil {
+		t.Fatalf("expected invalid env file error")
+	}
+}
+
+func TestWriteFileRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "loadwright.yaml")
+	original := &Spec{
+		Name:     "write-me",
+		Target:   "https://example.com",
+		Requests: []Request{{Path: "/health"}},
+	}
+	if err := WriteFile(original, path); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile() error = %v", err)
+	}
+	if loaded.Name != "write-me" || loaded.Target != "https://example.com" {
+		t.Fatalf("unexpected roundtrip: %+v", loaded)
+	}
+}
+
 func TestDefaultTimeoutAppliesToRequests(t *testing.T) {
 	raw := Spec{
 		Name:     "timeouts",
@@ -247,4 +332,8 @@ func TestDefaultTimeoutAppliesToRequests(t *testing.T) {
 	if raw.Requests[0].Timeout.Seconds != 5 || raw.Requests[1].Timeout.Seconds != 2 {
 		t.Fatalf("unexpected timeouts: %+v", raw.Requests)
 	}
+}
+
+func intPtr(value int) *int {
+	return &value
 }

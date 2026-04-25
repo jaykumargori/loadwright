@@ -18,6 +18,15 @@ func TestParseCompileArgsAcceptsFlagsAfterSpec(t *testing.T) {
 	}
 }
 
+func TestParseCompileArgsErrors(t *testing.T) {
+	if _, _, _, err := parseCompileArgs([]string{"spec.yaml", "-o"}); err == nil {
+		t.Fatalf("expected missing output value error")
+	}
+	if _, _, _, err := parseCompileArgs([]string{}); err == nil {
+		t.Fatalf("expected missing spec error")
+	}
+}
+
 func TestParseRunArgsAcceptsInterspersedFlags(t *testing.T) {
 	input, outputDir, envFile, ci, image, err := parseRunArgs([]string{"spec.yaml", "--ci", "--out-dir=results/test", "--env-file=.env.test", "--image", "jmeter:test"})
 	if err != nil {
@@ -25,6 +34,18 @@ func TestParseRunArgsAcceptsInterspersedFlags(t *testing.T) {
 	}
 	if input != "spec.yaml" || outputDir != "results/test" || envFile != ".env.test" || !ci || image != "jmeter:test" {
 		t.Fatalf("unexpected args: input=%q outputDir=%q env=%q ci=%v image=%q", input, outputDir, envFile, ci, image)
+	}
+}
+
+func TestParseRunArgsErrors(t *testing.T) {
+	if _, _, _, _, _, err := parseRunArgs([]string{"spec.yaml", "--out-dir"}); err == nil {
+		t.Fatalf("expected missing out-dir value error")
+	}
+	if _, _, _, _, _, err := parseRunArgs([]string{"spec.yaml", "--image"}); err == nil {
+		t.Fatalf("expected missing image value error")
+	}
+	if _, _, _, _, _, err := parseRunArgs([]string{}); err == nil {
+		t.Fatalf("expected missing input error")
 	}
 }
 
@@ -38,6 +59,12 @@ func TestParseDoctorArgs(t *testing.T) {
 	}
 }
 
+func TestParseDoctorArgsRejectsUnknown(t *testing.T) {
+	if _, _, err := parseDoctorArgs([]string{"--unknown"}); err == nil {
+		t.Fatalf("expected unknown doctor option error")
+	}
+}
+
 func TestParseImportOpenAPIArgs(t *testing.T) {
 	input, output, baseURL, err := parseImportOpenAPIArgs([]string{"openapi.yaml", "-o", "loadwright.yaml", "--base-url=https://staging.example.com"})
 	if err != nil {
@@ -45,6 +72,15 @@ func TestParseImportOpenAPIArgs(t *testing.T) {
 	}
 	if input != "openapi.yaml" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
 		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
+func TestParseImportOpenAPIArgsErrors(t *testing.T) {
+	if _, _, _, err := parseImportOpenAPIArgs([]string{"openapi.yaml", "--base-url"}); err == nil {
+		t.Fatalf("expected missing base-url value error")
+	}
+	if _, _, _, err := parseImportOpenAPIArgs([]string{}); err == nil {
+		t.Fatalf("expected missing OpenAPI input error")
 	}
 }
 
@@ -154,6 +190,27 @@ paths:
 	}
 	if !strings.Contains(string(data), "target: https://api.example.com") {
 		t.Fatalf("unexpected imported spec: %s", data)
+	}
+}
+
+func TestRunImportRejectsUnsupportedSource(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "postman", "collection.json"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "unsupported import source") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestRunCompileRejectsInvalidSpec(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	if err := os.WriteFile("bad.yaml", []byte("name: bad\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compile", "bad.yaml"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "invalid spec") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 }
 

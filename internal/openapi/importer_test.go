@@ -86,6 +86,51 @@ func TestImportRejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
+func TestImportRejectsNoPathsAndNoOperations(t *testing.T) {
+	if _, err := Import(Document{OpenAPI: "3.0.3"}, Options{}); err == nil {
+		t.Fatalf("expected no paths error")
+	}
+	if _, err := Import(Document{OpenAPI: "3.0.3", Paths: map[string]PathItem{"/x": {}}}, Options{}); err == nil {
+		t.Fatalf("expected no operations error")
+	}
+}
+
+func TestImportExamplesAndSchemaFallbacks(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "Examples"},
+		Paths: map[string]PathItem{
+			"/items": {Post: &Operation{
+				RequestBody: &RequestBody{Content: map[string]MediaType{
+					"application/json": {
+						Examples: map[string]Example{"one": {Value: map[string]any{"name": "from-example"}}},
+					},
+				}},
+				Responses: map[string]Response{"default": {}},
+			}},
+			"/flags": {Get: &Operation{Parameters: []Parameter{
+				{Name: "enabled", In: "query", Schema: Schema{Type: "boolean"}},
+				{Name: "count", In: "query", Schema: Schema{Type: "integer"}},
+			}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	requests := map[string]int{}
+	for index, request := range imported.Requests {
+		requests[request.Name] = index
+	}
+	body := imported.Requests[requests["POST /items"]].Body.(map[string]any)
+	if body["name"] != "from-example" {
+		t.Fatalf("example body not used: %+v", body)
+	}
+	flags := imported.Requests[requests["GET /flags"]]
+	if flags.Query["enabled"] != "true" || flags.Query["count"] != "1" {
+		t.Fatalf("query examples not generated: %+v", flags.Query)
+	}
+}
+
 const petstoreLiteYAML = `openapi: 3.0.3
 info:
   title: Petstore Lite

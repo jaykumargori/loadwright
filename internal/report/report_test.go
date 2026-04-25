@@ -101,6 +101,19 @@ func TestRenderOutputsContainThresholdStatus(t *testing.T) {
 	}
 }
 
+func TestWriteAllCreatesArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	summary := &Summary{TotalSamples: 1, Successful: 1, Endpoints: map[string]Endpoint{}}
+	if err := WriteAll(summary, dir); err != nil {
+		t.Fatalf("WriteAll() error = %v", err)
+	}
+	for _, name := range []string{"summary.json", "summary.md", "index.html"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("expected %s: %v", name, err)
+		}
+	}
+}
+
 func writeJTL(t *testing.T, contents string) string {
 	t.Helper()
 	dir := t.TempDir()
