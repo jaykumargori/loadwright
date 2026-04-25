@@ -44,7 +44,10 @@ results/
 tests/*.jmx
 jmeter_plugins/
 
+# Go
+bin/
+coverage.out
+
 # OS
 .DS_Store
 Thumbs.db
-

@@ -1,0 +1,25 @@
+name: httpbin-basic
+target: https://httpbin.org
+load:
+  users: 5
+  ramp_up: 10s
+  loops: 3
+requests:
+  - name: get status
+    method: GET
+    path: /status/200
+    expect:
+      status: 200
+  - name: post json
+    method: POST
+    path: /post
+    headers:
+      content-type: application/json
+    body:
+      source: jmeterx
+      kind: example
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000
