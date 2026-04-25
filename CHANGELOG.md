@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Remove the legacy Python prototype from the public repository.
+- Add public project-status badges and initial prototype attribution.
+
 ## 0.1.0 - 2026-04-25
 
 - Start Go-first OSS implementation.

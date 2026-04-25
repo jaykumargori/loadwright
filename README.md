@@ -1,10 +1,21 @@
 # Loadwright
 
+[![CI](https://github.com/devaryakjha/loadwright/actions/workflows/ci.yml/badge.svg)](https://github.com/devaryakjha/loadwright/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/devaryakjha/loadwright?sort=semver)](https://github.com/devaryakjha/loadwright/releases)
+[![Go](https://img.shields.io/github/go-mod/go-version/devaryakjha/loadwright)](go.mod)
+[![License](https://img.shields.io/github/license/devaryakjha/loadwright)](LICENSE)
+
 Docker-first, spec-driven JMeter automation.
 
 Loadwright turns readable YAML specs into portable JMeter `.jmx` test plans, runs them through Dockerized JMeter, and emits JSON, Markdown, HTML, and JUnit reports for local development and CI.
 
 It is not a new load-testing engine. It is a small automation layer that keeps JMeter compatibility while making common API load-test workflows easier to review, run, and ship.
+
+## Project Status
+
+Loadwright is at `v0.1.0`. It is usable for HTTP API load-test workflows and CI smoke/performance checks, but the public API and YAML spec may still evolve before `v1.0.0`.
+
+The current release is intentionally focused: HTTP requests, Dockerized JMeter execution, OpenAPI bootstrapping, CSV data, thresholds, and reports. WebSocket support, plugin management, Postman/HAR import, distributed runners, and AI-assisted workflows are planned later.
 
 ## Why This Exists
 
@@ -131,6 +142,10 @@ go vet ./...
 ## Releases
 
 Tagged releases are built with GoReleaser and publish cross-platform binaries plus checksums. See [docs/install.md](docs/install.md).
+
+## Credits
+
+The initial experimental prototype that led to this project was built by [Jay Kumar Gori](https://github.com/jaykumargori). The public OSS implementation is the Go CLI in this repository.
 
 ## License
 

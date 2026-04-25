@@ -26,3 +26,7 @@ go build -o bin/loadwright ./cmd/loadwright
 loadwright is spec-driven first. New runtime behavior should normally start as a documented YAML spec change, then compile to deterministic JMX.
 
 AI features are welcome only when they produce reviewable specs, explanations, or suggestions. Normal runs must not require AI.
+
+## Attribution
+
+The initial experimental prototype that inspired Loadwright was built by [Jay Kumar Gori](https://github.com/jaykumargori). Public contributors should keep attribution intact in README-facing project materials.

@@ -2,7 +2,7 @@
 
 loadwright aims to become a true open source, Docker-first, spec-driven JMeter automation tool. The core product should work without AI, without a hosted service, and without requiring users to understand raw JMX XML.
 
-The new OSS implementation is Go-first. The original Python prototype can remain in the repository temporarily as legacy/reference code, but the public CLI should be implemented as a portable Go binary.
+The OSS implementation is Go-first. The original Python prototype was removed before the public release to keep the repository focused; attribution is preserved in the README.
 
 ## Product Promise
 
