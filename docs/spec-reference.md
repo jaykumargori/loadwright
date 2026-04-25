@@ -1,6 +1,6 @@
 # Spec Reference
 
-jmeterx specs are YAML files that compile to portable JMeter `.jmx` files.
+loadwright specs are YAML files that compile to portable JMeter `.jmx` files.
 
 ```yaml
 name: httpbin-basic

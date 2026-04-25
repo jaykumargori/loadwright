@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jmeterx/jmeterx/internal/spec"
+	"github.com/devaryakjha/loadwright/internal/spec"
 )
 
 func TestParseJTLEvaluatesThresholds(t *testing.T) {

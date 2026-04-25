@@ -1,16 +1,16 @@
-# jmeterx
+# Loadwright
 
 Docker-first, spec-driven JMeter automation.
 
-jmeterx turns readable YAML specs into portable JMeter `.jmx` test plans, runs them through Dockerized JMeter, and emits reports that work well locally and in CI.
+loadwright turns readable YAML specs into portable JMeter `.jmx` test plans, runs them through Dockerized JMeter, and emits reports that work well locally and in CI.
 
 This repository still contains the original Python prototype as reference code. The public OSS direction is the Go CLI under `cmd/` and `internal/`.
 
 ## Why This Exists
 
-JMeter is powerful, but the day-to-day workflow can be awkward: JMX XML, local Java/JMeter setup, Docker wiring, plugin handling, reports, and CI thresholds. jmeterx keeps JMeter compatibility while giving teams a small CLI and reviewable specs.
+JMeter is powerful, but the day-to-day workflow can be awkward: JMX XML, local Java/JMeter setup, Docker wiring, plugin handling, reports, and CI thresholds. Loadwright keeps JMeter compatibility while giving teams a small CLI and reviewable specs.
 
-Use jmeterx when you want:
+Use Loadwright when you want:
 
 - a readable YAML source of truth for load tests
 - Dockerized JMeter runs without local JMeter setup
@@ -23,7 +23,7 @@ Use jmeterx when you want:
 Requires Go 1.22+ and Docker.
 
 ```bash
-go build -o bin/jmeterx ./cmd/jmeterx
+go build -o bin/loadwright ./cmd/loadwright
 ```
 
 ## Quickstart
@@ -31,14 +31,14 @@ go build -o bin/jmeterx ./cmd/jmeterx
 Create a starter spec:
 
 ```bash
-bin/jmeterx init
+bin/loadwright init
 ```
 
 Or use the included example:
 
 ```bash
-bin/jmeterx compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
-bin/jmeterx run examples/api/basic.yaml --ci
+bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
+bin/loadwright run examples/api/basic.yaml --ci
 ```
 
 Reports are written to `results/<run-id>/`:
@@ -73,10 +73,10 @@ See [docs/spec-reference.md](docs/spec-reference.md) for the current spec format
 ## Commands
 
 ```bash
-jmeterx doctor
-jmeterx init [path]
-jmeterx compile <spec.yaml> [-o tests/name.jmx]
-jmeterx run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
+loadwright doctor
+loadwright init [path]
+loadwright compile <spec.yaml> [-o tests/name.jmx]
+loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
 ```
 
 ## Roadmap

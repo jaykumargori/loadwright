@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmeterx/jmeterx/internal/jmx"
-	"github.com/jmeterx/jmeterx/internal/report"
-	"github.com/jmeterx/jmeterx/internal/runtime"
-	"github.com/jmeterx/jmeterx/internal/spec"
+	"github.com/devaryakjha/loadwright/internal/jmx"
+	"github.com/devaryakjha/loadwright/internal/report"
+	"github.com/devaryakjha/loadwright/internal/runtime"
+	"github.com/devaryakjha/loadwright/internal/spec"
 )
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -39,13 +39,13 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, `jmeterx: Docker-first, spec-driven JMeter automation
+	fmt.Fprintln(w, `Loadwright: Docker-first, spec-driven JMeter automation
 
 Usage:
-  jmeterx doctor
-  jmeterx init [path]
-  jmeterx compile <spec.yaml> [-o tests/name.jmx]
-  jmeterx run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
+  loadwright doctor
+  loadwright init [path]
+  loadwright compile <spec.yaml> [-o tests/name.jmx]
+  loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--ci]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
@@ -71,7 +71,7 @@ func doctor(stdout io.Writer) int {
 }
 
 func initSpec(args []string, stdout io.Writer, stderr io.Writer) int {
-	path := "jmeterx.yaml"
+	path := "loadwright.yaml"
 	if len(args) > 0 {
 		path = args[0]
 	}

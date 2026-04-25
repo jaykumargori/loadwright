@@ -1,6 +1,6 @@
-# jmeterx Roadmap
+# Loadwright Roadmap
 
-jmeterx aims to become a true open source, Docker-first, spec-driven JMeter automation tool. The core product should work without AI, without a hosted service, and without requiring users to understand raw JMX XML.
+loadwright aims to become a true open source, Docker-first, spec-driven JMeter automation tool. The core product should work without AI, without a hosted service, and without requiring users to understand raw JMX XML.
 
 The new OSS implementation is Go-first. The original Python prototype can remain in the repository temporarily as legacy/reference code, but the public CLI should be implemented as a portable Go binary.
 
@@ -45,7 +45,7 @@ Rust remains a good future option for deeply performance-sensitive internals, bu
 Goal: make the project installable, testable, and understandable.
 
 - Add Go module structure under `cmd/` and `internal/`.
-- Add a `jmeterx` binary entry point.
+- Add a `Loadwright` binary entry point.
 - Add a deterministic CLI.
 - Add a YAML spec model with validation.
 - Add an API test JMX generator.
@@ -60,10 +60,10 @@ Goal: make the project installable, testable, and understandable.
 
 Goal: make the tool valuable for backend developers, QA engineers, and CI pipelines.
 
-- `jmeterx doctor` to verify Docker, image access, writable paths, and JMeter startup.
-- `jmeterx init` to create a starter spec.
-- `jmeterx compile spec.yaml --out tests/spec.jmx`.
-- `jmeterx run spec.yaml --ci`.
+- `loadwright doctor` to verify Docker, image access, writable paths, and JMeter startup.
+- `loadwright init` to create a starter spec.
+- `loadwright compile spec.yaml --out tests/spec.jmx`.
+- `loadwright run spec.yaml --ci`.
 - Threshold-based pass/fail behavior.
 - Stable output directory layout with `latest` pointers or clear run IDs.
 - Better error messages for invalid specs and failed JMeter runs.
@@ -73,7 +73,7 @@ Goal: make the tool valuable for backend developers, QA engineers, and CI pipeli
 
 Goal: let teams reuse assets they already have.
 
-- Import OpenAPI/Swagger specs into jmeterx YAML.
+- Import OpenAPI/Swagger specs into Loadwright YAML.
 - Import Postman collections.
 - Import browser HAR files.
 - Run and report on existing `.jmx` files without conversion.
@@ -86,7 +86,7 @@ Goal: make JMeter plugin usage less painful.
 - First-class WebSocket spec support.
 - Reliable WebSocket plugin installation and verification.
 - Plugin lockfile or manifest for reproducible plugin versions.
-- Plugin health checks in `jmeterx doctor`.
+- Plugin health checks in `loadwright doctor`.
 - Clear plugin docs and troubleshooting output.
 
 ## Phase 5: AI-Assisted Workflow
@@ -98,9 +98,9 @@ AI should generate or modify specs, not secretly mutate runtime behavior.
 Potential commands:
 
 ```bash
-jmeterx ai generate "test login and checkout with 50 users for 5 minutes"
-jmeterx ai explain results/run-123/summary.json
-jmeterx ai improve spec.yaml --from results/run-123/summary.json
+loadwright ai generate "test login and checkout with 50 users for 5 minutes"
+loadwright ai explain results/run-123/summary.json
+loadwright ai improve spec.yaml --from results/run-123/summary.json
 ```
 
 AI features:
@@ -153,10 +153,10 @@ Goal: make the project welcoming and maintainable.
 
 The first public-quality release should include:
 
-- `jmeterx doctor`
-- `jmeterx init`
-- `jmeterx compile`
-- `jmeterx run`
+- `loadwright doctor`
+- `loadwright init`
+- `loadwright compile`
+- `loadwright run`
 - YAML API test specs
 - Dockerized JMeter execution
 - JSON, Markdown, and HTML reports

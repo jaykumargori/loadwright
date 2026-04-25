@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmeterx/jmeterx/internal/spec"
+	"github.com/devaryakjha/loadwright/internal/spec"
 )
 
 type Summary struct {
@@ -213,7 +213,7 @@ func RenderHTML(s *Summary) string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>jmeterx report</title>
+  <title>Loadwright report</title>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #17202a; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
@@ -226,7 +226,7 @@ func RenderHTML(s *Summary) string {
   </style>
 </head>
 <body>
-  <h1>jmeterx report <span class="%s">%s</span></h1>
+  <h1>Loadwright report <span class="%s">%s</span></h1>
   <div class="grid">
     <div class="metric"><strong>%d</strong>Total samples</div>
     <div class="metric"><strong>%d</strong>Failed</div>

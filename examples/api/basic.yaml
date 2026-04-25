@@ -16,7 +16,7 @@ requests:
     headers:
       content-type: application/json
     body:
-      source: jmeterx
+      source: Loadwright
       kind: example
     expect:
       status: 200

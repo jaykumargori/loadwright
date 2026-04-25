@@ -1,4 +1,4 @@
-module github.com/jmeterx/jmeterx
+module github.com/devaryakjha/loadwright
 
 go 1.22
 

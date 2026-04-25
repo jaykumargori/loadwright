@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/jmeterx/jmeterx/internal/cli"
+	"github.com/devaryakjha/loadwright/internal/cli"
 )
 
 func main() {

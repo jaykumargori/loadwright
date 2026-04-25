@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmeterx/jmeterx/internal/spec"
+	"github.com/devaryakjha/loadwright/internal/spec"
 )
 
 func TestRenderProducesValidJMX(t *testing.T) {

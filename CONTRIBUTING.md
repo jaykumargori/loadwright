@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve jmeterx.
+Thanks for helping improve Loadwright.
 
 ## Development
 
@@ -18,11 +18,11 @@ go test ./...
 Build the CLI:
 
 ```bash
-go build -o bin/jmeterx ./cmd/jmeterx
+go build -o bin/loadwright ./cmd/loadwright
 ```
 
 ## Project Direction
 
-jmeterx is spec-driven first. New runtime behavior should normally start as a documented YAML spec change, then compile to deterministic JMX.
+loadwright is spec-driven first. New runtime behavior should normally start as a documented YAML spec change, then compile to deterministic JMX.
 
 AI features are welcome only when they produce reviewable specs, explanations, or suggestions. Normal runs must not require AI.
