@@ -24,3 +24,4 @@
 - Add `loadwright validate` for fast no-Docker spec checks.
 - Add GitHub issue/PR templates and compatibility policy.
 - Add `loadwright report` for regenerating reports from existing JTL files.
+- Add CI-friendly `junit.xml` report output.

@@ -99,6 +99,40 @@ func TestRenderOutputsContainThresholdStatus(t *testing.T) {
 	if got := RenderHTML(summary); !strings.Contains(got, "p95_ms_lt") || !strings.Contains(got, "PASS") {
 		t.Fatalf("html missing threshold table: %s", got)
 	}
+	if got := RenderJUnit(summary); !strings.Contains(got, `tests="2"`) ||
+		!strings.Contains(got, `name="p95_ms_lt"`) ||
+		strings.Contains(got, "<failure") {
+		t.Fatalf("junit missing passing threshold case: %s", got)
+	}
+}
+
+func TestRenderJUnitContainsFailures(t *testing.T) {
+	summary := &Summary{
+		TotalSamples: 2,
+		Successful:   1,
+		Failed:       1,
+		ErrorRate:    50,
+		AverageMS:    500,
+		P95MS:        950,
+		Thresholds: []ThresholdResult{{
+			Name:   "error_rate_lt",
+			Limit:  1,
+			Actual: 50,
+			Passed: false,
+		}},
+	}
+	got := RenderJUnit(summary)
+	for _, want := range []string{
+		`tests="2"`,
+		`failures="2"`,
+		`type="sample_failure"`,
+		`type="threshold_failure"`,
+		`error_rate_lt failed`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("junit = %s, want substring %q", got, want)
+		}
+	}
 }
 
 func TestWriteAllCreatesArtifacts(t *testing.T) {
@@ -107,7 +141,7 @@ func TestWriteAllCreatesArtifacts(t *testing.T) {
 	if err := WriteAll(summary, dir); err != nil {
 		t.Fatalf("WriteAll() error = %v", err)
 	}
-	for _, name := range []string{"summary.json", "summary.md", "index.html"} {
+	for _, name := range []string{"summary.json", "summary.md", "index.html", "junit.xml"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Fatalf("expected %s: %v", name, err)
 		}

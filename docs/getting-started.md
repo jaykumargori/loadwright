@@ -32,6 +32,7 @@ The run writes artifacts to `results/<run-id>/`:
 - `summary.json`
 - `summary.md`
 - `index.html`
+- `junit.xml`
 
 ## Compile Without Running
 

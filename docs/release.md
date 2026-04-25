@@ -49,4 +49,5 @@ Pushing the tag triggers `.github/workflows/release.yml`, which publishes GitHub
 - Confirm `checksums.txt` exists.
 - Confirm the container image exists in GHCR.
 - Run a downloaded binary with `loadwright version`.
+- Confirm `summary.json`, `summary.md`, `index.html`, and `junit.xml` are produced by the release smoke test.
 - Create a follow-up issue for anything deferred from the release.

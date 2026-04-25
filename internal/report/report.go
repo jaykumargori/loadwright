@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/csv"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"html"
 	"math"
@@ -43,6 +44,28 @@ type ThresholdResult struct {
 	Limit  float64 `json:"limit"`
 	Actual float64 `json:"actual"`
 	Passed bool    `json:"passed"`
+}
+
+type junitTestSuite struct {
+	XMLName   xml.Name        `xml:"testsuite"`
+	Name      string          `xml:"name,attr"`
+	Tests     int             `xml:"tests,attr"`
+	Failures  int             `xml:"failures,attr"`
+	TestCases []junitTestCase `xml:"testcase"`
+}
+
+type junitTestCase struct {
+	ClassName string        `xml:"classname,attr"`
+	Name      string        `xml:"name,attr"`
+	Time      string        `xml:"time,attr"`
+	Failure   *junitFailure `xml:"failure,omitempty"`
+	SystemOut string        `xml:"system-out,omitempty"`
+}
+
+type junitFailure struct {
+	Message string `xml:"message,attr"`
+	Type    string `xml:"type,attr"`
+	Body    string `xml:",chardata"`
 }
 
 func ParseJTL(path string, thresholds spec.Thresholds) (*Summary, error) {
@@ -177,7 +200,10 @@ func WriteAll(summary *Summary, outDir string) error {
 	if err := os.WriteFile(filepath.Join(outDir, "summary.md"), []byte(RenderMarkdown(summary)), 0o644); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(outDir, "index.html"), []byte(RenderHTML(summary)), 0o644)
+	if err := os.WriteFile(filepath.Join(outDir, "index.html"), []byte(RenderHTML(summary)), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outDir, "junit.xml"), []byte(RenderJUnit(summary)), 0o644)
 }
 
 func RenderMarkdown(s *Summary) string {
@@ -239,6 +265,66 @@ func RenderHTML(s *Summary) string {
 </body>
 </html>
 `, strings.ToLower(status), status, s.TotalSamples, s.Failed, s.ErrorRate, s.AverageMS, s.P95MS, s.P99MS, renderThresholdTable(s))
+}
+
+func RenderJUnit(s *Summary) string {
+	cases := []junitTestCase{junitSamplesCase(s)}
+	for _, threshold := range s.Thresholds {
+		cases = append(cases, junitThresholdCase(threshold))
+	}
+	failures := 0
+	for _, testCase := range cases {
+		if testCase.Failure != nil {
+			failures++
+		}
+	}
+	suite := junitTestSuite{
+		Name:      "Loadwright",
+		Tests:     len(cases),
+		Failures:  failures,
+		TestCases: cases,
+	}
+	data, err := xml.MarshalIndent(suite, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return xml.Header + string(data) + "\n"
+}
+
+func junitSamplesCase(s *Summary) junitTestCase {
+	testCase := junitTestCase{
+		ClassName: "loadwright.samples",
+		Name:      "samples",
+		Time:      fmt.Sprintf("%.3f", s.AverageMS/1000),
+		SystemOut: fmt.Sprintf("total=%d successful=%d failed=%d error_rate=%.2f%% p95_ms=%.2f", s.TotalSamples, s.Successful, s.Failed, s.ErrorRate, s.P95MS),
+	}
+	if s.Failed > 0 {
+		message := fmt.Sprintf("%d of %d samples failed", s.Failed, s.TotalSamples)
+		testCase.Failure = &junitFailure{
+			Message: message,
+			Type:    "sample_failure",
+			Body:    message,
+		}
+	}
+	return testCase
+}
+
+func junitThresholdCase(threshold ThresholdResult) junitTestCase {
+	testCase := junitTestCase{
+		ClassName: "loadwright.thresholds",
+		Name:      threshold.Name,
+		Time:      "0",
+		SystemOut: fmt.Sprintf("actual=%.2f limit=%.2f", threshold.Actual, threshold.Limit),
+	}
+	if !threshold.Passed {
+		message := fmt.Sprintf("%s failed: actual %.2f must be less than %.2f", threshold.Name, threshold.Actual, threshold.Limit)
+		testCase.Failure = &junitFailure{
+			Message: message,
+			Type:    "threshold_failure",
+			Body:    message,
+		}
+	}
+	return testCase
 }
 
 func renderThresholdTable(s *Summary) string {

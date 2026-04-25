@@ -330,7 +330,7 @@ func TestRunReportCreatesArtifacts(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run(report) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	for _, name := range []string{"summary.json", "summary.md", "index.html"} {
+	for _, name := range []string{"summary.json", "summary.md", "index.html", "junit.xml"} {
 		if _, err := os.Stat(filepath.Join("report-out", name)); err != nil {
 			t.Fatalf("expected %s: %v", name, err)
 		}
@@ -407,7 +407,7 @@ thresholds:
 	if code != 0 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html"} {
+	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html", "junit.xml"} {
 		if _, err := os.Stat(filepath.Join("results", "smoke", name)); err != nil {
 			t.Fatalf("expected %s: %v", name, err)
 		}

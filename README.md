@@ -55,6 +55,7 @@ Reports are written to `results/<run-id>/`:
 - `summary.json`
 - `summary.md`
 - `index.html`
+- `junit.xml`
 
 ## Example Spec
 

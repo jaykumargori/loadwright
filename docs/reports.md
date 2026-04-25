@@ -14,6 +14,7 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir results/manual-
 - `summary.json`: machine-readable summary
 - `summary.md`: concise Markdown summary
 - `index.html`: standalone human-readable report
+- `junit.xml`: CI-friendly JUnit report for sample and threshold failures
 
 ## Metrics
 
@@ -52,3 +53,7 @@ bin/loadwright report results.jtl \
 ```
 
 The report command writes artifacts before checking the `--ci` exit status, so failed threshold runs still leave inspectable summaries behind.
+
+## JUnit
+
+`junit.xml` contains one testcase for sample failures and one testcase per threshold. This makes Loadwright reports consumable by CI systems that understand JUnit test reports.

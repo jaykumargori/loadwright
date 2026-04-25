@@ -26,6 +26,8 @@ Use `report` when another JMeter job already produced a JTL file:
 bin/loadwright report results.jtl --out-dir results/report --error-rate-lt 1 --p95-ms-lt 3000 --ci
 ```
 
+Upload `results/**/junit.xml` with your CI platform's JUnit test report integration when available.
+
 The command exits with:
 
 - `0` when JMeter runs successfully and thresholds pass
