@@ -265,6 +265,10 @@ func TestRenderWebSocketSampler(t *testing.T) {
 			Protocol: "websocket",
 			Path:     "/socket",
 			WebSocket: spec.WebSocket{
+				Subprotocol: "echo-protocol",
+				Headers: map[string]string{
+					"X-Custom-Header": "test-value",
+				},
 				Timeout: spec.Duration{Seconds: 3, Set: true},
 				Messages: []spec.WSMessage{{
 					Send: "ping",
@@ -289,6 +293,11 @@ func TestRenderWebSocketSampler(t *testing.T) {
 		`<stringProp name="readTimeout">3000</stringProp>`,
 		`<stringProp name="requestData">ping</stringProp>`,
 		`<boolProp name="createNewConnection">true</boolProp>`,
+		`<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="WebSocket Handshake Headers" enabled="true">`,
+		`<stringProp name="Header.name">Sec-WebSocket-Protocol</stringProp>`,
+		`<stringProp name="Header.value">echo-protocol</stringProp>`,
+		`<stringProp name="Header.name">X-Custom-Header</stringProp>`,
+		`<stringProp name="Header.value">test-value</stringProp>`,
 		// Response assertion for expect_contains
 		`<stringProp name="0">pong</stringProp>`,
 		`Assertion.response_data`,
@@ -310,6 +319,10 @@ func TestRenderWebSocketMultiMessage(t *testing.T) {
 			Protocol: "websocket",
 			WebSocket: spec.WebSocket{
 				Timeout: spec.Duration{Seconds: 5, Set: true},
+				CloseTimeout: spec.Duration{
+					Seconds: 2,
+					Set:     true,
+				},
 				Messages: []spec.WSMessage{
 					{Send: "hello", Type: "text", Expect: &spec.WSExpect{Contains: "hello", Timeout: spec.Duration{Seconds: 5, Set: true}}},
 					{Send: "world", Type: "text"},
@@ -332,6 +345,7 @@ func TestRenderWebSocketMultiMessage(t *testing.T) {
 		`<stringProp name="requestData">world</stringProp>`,
 		// Close connection
 		`testclass="eu.luminis.jmeter.wssampler.CloseWebSocketSampler"`,
+		`<stringProp name="readTimeout">2000</stringProp>`,
 		// Contains assertion for first message
 		`<stringProp name="0">hello</stringProp>`,
 	} {
@@ -420,11 +434,11 @@ func TestRenderWebSocketLegacyCompat(t *testing.T) {
 
 func TestRenderWebSocketURLParsing(t *testing.T) {
 	tests := []struct {
-		url     string
-		server  string
-		port    string
-		path    string
-		useTLS  bool
+		url    string
+		server string
+		port   string
+		path   string
+		useTLS bool
 	}{
 		{"wss://echo.example.com/socket", "echo.example.com", "443", "/socket", true},
 		{"ws://localhost:8080/ws", "localhost", "8080", "/ws", false},

@@ -16,10 +16,10 @@ import (
 
 // WSMessage describes a single WebSocket message in a multi-message sequence.
 type WSMessage struct {
-	Send   string   `yaml:"send"`
-	Type   string   `yaml:"type,omitempty"`
+	Send   string    `yaml:"send"`
+	Type   string    `yaml:"type,omitempty"`
 	Expect *WSExpect `yaml:"expect,omitempty"`
-	Delay  Duration `yaml:"delay,omitempty"`
+	Delay  Duration  `yaml:"delay,omitempty"`
 }
 
 // WSExpect describes the expected response for a single WebSocket message.
@@ -135,9 +135,9 @@ type Request struct {
 	Headers   map[string]string `yaml:"headers,omitempty"`
 	Query     map[string]string `yaml:"query,omitempty"`
 	Body      any               `yaml:"body,omitempty"`
-  BodyJSON any               `yaml:"body_json,omitempty"`
-	BodyText string            `yaml:"body_text,omitempty"`
-	BodyForm map[string]string `yaml:"body_form,omitempty"`
+	BodyJSON  any               `yaml:"body_json,omitempty"`
+	BodyText  string            `yaml:"body_text,omitempty"`
+	BodyForm  map[string]string `yaml:"body_form,omitempty"`
 	Auth      Auth              `yaml:"auth,omitempty"`
 	Timeout   Duration          `yaml:"timeout,omitempty"`
 	Expect    Expect            `yaml:"expect"`
@@ -351,7 +351,8 @@ func (r *Request) normalizeAndValidateWebSocket(index int) error {
 	if !r.Auth.IsZero() {
 		return fmt.Errorf("requests[%d].auth is not supported for websocket requests", index)
 	}
-	if len(r.Headers) > 0 || len(r.Query) > 0 || r.Body != nil || r.Expect.Status > 0 {
+	hasHTTPOnlyBody := r.Body != nil || r.BodyJSON != nil || strings.TrimSpace(r.BodyText) != "" || len(r.BodyForm) > 0
+	if len(r.Headers) > 0 || len(r.Query) > 0 || hasHTTPOnlyBody || r.Expect.Status > 0 {
 		return fmt.Errorf("requests[%d] websocket requests only support websocket.* fields plus optional path and timeout", index)
 	}
 	r.WebSocket.URL = strings.TrimSpace(r.WebSocket.URL)
@@ -418,6 +419,9 @@ func (r *Request) normalizeAndValidateWebSocket(index int) error {
 	if !r.WebSocket.CloseTimeout.Set && r.WebSocket.Timeout.Set {
 		r.WebSocket.CloseTimeout = r.WebSocket.Timeout
 	}
+
+	return nil
+}
 
 func (r *Request) validateBodyFields(index int) error {
 	var fields []string

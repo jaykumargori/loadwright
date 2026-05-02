@@ -133,6 +133,12 @@ loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparis
 
 `doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.
 
+For WebSocket specs, pass a plugin-enabled image explicitly, for example:
+
+```bash
+bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:latest
+```
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). The short version:

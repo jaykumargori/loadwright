@@ -93,7 +93,7 @@ Demonstrates default and request-specific timeouts.
 ## WebSocket Echo
 
 ```bash
-bin/loadwright run examples/api/websocket-echo.yaml --ci
+bin/loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
 Demonstrates a WebSocket request that sends one message and checks the first response.
@@ -101,7 +101,7 @@ Demonstrates a WebSocket request that sends one message and checks the first res
 ## WebSocket Multi-Message
 
 ```bash
-bin/loadwright run examples/api/websocket-multi.yaml --ci
+bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
 Demonstrates a multi-message WebSocket sequence with delays and per-message assertions.
@@ -109,7 +109,7 @@ Demonstrates a multi-message WebSocket sequence with delays and per-message asse
 ## WebSocket Subprotocol
 
 ```bash
-bin/loadwright run examples/api/websocket-subprotocol.yaml --ci
+bin/loadwright run examples/api/websocket-subprotocol.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
 Demonstrates WebSocket subprotocol negotiation and custom handshake headers.
