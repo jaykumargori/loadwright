@@ -23,7 +23,7 @@ thresholds:
 ## Fields
 
 - `name`: required test name.
-- `target`: required base `http` or `https` URL.
+- `target`: required base `http`, `https`, `ws`, or `wss` URL.
 - `variables`: optional map of template variables.
 - `defaults.timeout`: optional default request timeout.
 - `auth`: optional global auth helper.
@@ -32,7 +32,7 @@ thresholds:
 - `load.ramp_up`: ramp-up duration. Supports seconds as an integer or strings like `30s`, `5m`, `1h`.
 - `load.loops`: number of loops per user.
 - `load.duration`: duration-based run. When set without `loops`, the generated JMX runs loops until the duration expires.
-- `requests`: required list of HTTP requests.
+- `requests`: required list of HTTP or WebSocket requests.
 - `thresholds`: optional CI pass/fail rules.
 
 ## Variables
@@ -99,6 +99,72 @@ requests:
 ```
 
 Loadwright renders the timeout into JMeter connect and response timeout fields in milliseconds.
+
+For WebSocket requests, `timeout` can also be set inside `websocket.timeout`.
+
+## WebSocket Requests
+
+Set `protocol: websocket` to use a WebSocket request in `requests`.
+
+### Basic single-message example
+
+```yaml
+target: wss://echo.websocket.events
+requests:
+  - name: ws ping
+    protocol: websocket
+    path: /
+    websocket:
+      message: ping
+      expect_contains: ping
+      timeout: 5s
+```
+
+### Multi-message sequence
+
+Use `websocket.messages[]` for richer multi-message sequences:
+
+```yaml
+requests:
+  - name: chat flow
+    protocol: websocket
+    path: /chat
+    websocket:
+      timeout: 10s
+      messages:
+        - send: hello
+          expect:
+            contains: hello
+        - send: how are you
+          delay: 1s
+          expect:
+            contains: how are you
+            timeout: 5s
+```
+
+### WebSocket fields
+
+| Field | Description |
+|-------|-------------|
+| `websocket.url` | Optional. When omitted, Loadwright builds the URL from `target + path`. |
+| `websocket.timeout` | Connection timeout. Inherited by `messages[].expect.timeout` when not set per message. |
+| `websocket.subprotocol` | Optional WebSocket subprotocol (e.g. `graphql-ws`). |
+| `websocket.headers` | Optional map of custom headers sent during the WebSocket handshake. |
+| `websocket.close_timeout` | Optional timeout for the graceful close handshake. Defaults to `timeout`. |
+| `websocket.messages[]` | Ordered list of messages to send and optionally assert. |
+| `websocket.messages[].send` | Required. The text payload to send. |
+| `websocket.messages[].type` | `text` (default) or `binary`. For `binary`, `send` must be valid base64. |
+| `websocket.messages[].delay` | Optional delay before sending this message. |
+| `websocket.messages[].expect.contains` | Optional substring assertion on the received response. |
+| `websocket.messages[].expect.timeout` | Per-message read timeout. Defaults to the connection `timeout`. |
+
+### Legacy fields
+
+The `websocket.message` and `websocket.expect_contains` fields are still supported for backward compatibility. They are equivalent to a single-element `messages[]` list. You cannot mix legacy fields with `messages[]` in the same request.
+
+### Restrictions
+
+WebSocket requests do not support HTTP-only fields (`method`, `headers`, `query`, `body`, `expect.status`, `auth`). Use `websocket.headers` for custom WebSocket handshake headers.
 
 ## Data Sources
 

@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const DefaultJMeterImage = "justb4/jmeter:latest"
+const DefaultJMeterImage = "loadwright/jmeter:latest"
 
 type RunOptions struct {
 	Image      string

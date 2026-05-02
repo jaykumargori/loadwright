@@ -1,0 +1,24 @@
+name: websocket-multi
+target: wss://ws.postman-echo.com/raw
+load:
+  users: 2
+  ramp_up: 5s
+  loops: 3
+requests:
+  - name: multi-message echo
+    protocol: websocket
+    path: /
+    websocket:
+      timeout: 10s
+      messages:
+        - send: hello
+          expect:
+            contains: hello
+        - send: loadwright-test
+          delay: 1s
+          expect:
+            contains: loadwright-test
+            timeout: 5s
+thresholds:
+  error_rate_lt: 5
+  p95_ms_lt: 5000

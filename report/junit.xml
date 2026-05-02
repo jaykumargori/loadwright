@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Loadwright" tests="3" failures="2">
+  <testcase classname="loadwright.samples" name="samples" time="0.954">
+    <failure message="1 of 1 samples failed" type="sample_failure">1 of 1 samples failed</failure>
+    <system-out>total=1 successful=0 failed=1 error_rate=100.00% p95_ms=954.00</system-out>
+  </testcase>
+  <testcase classname="loadwright.thresholds" name="error_rate_lt" time="0">
+    <failure message="error_rate_lt failed: actual 100.00 must be less than 100.00" type="threshold_failure">error_rate_lt failed: actual 100.00 must be less than 100.00</failure>
+    <system-out>actual=100.00 limit=100.00</system-out>
+  </testcase>
+  <testcase classname="loadwright.thresholds" name="p95_ms_lt" time="0">
+    <system-out>actual=954.00 limit=2000.00</system-out>
+  </testcase>
+</testsuite>

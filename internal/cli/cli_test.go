@@ -371,7 +371,7 @@ func TestRunCompileRejectsInvalidSpec(t *testing.T) {
 	if code != 1 || !strings.Contains(stderr.String(), "invalid spec:") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "- target must be an absolute http or https URL") ||
+	if !strings.Contains(stderr.String(), "- target must be an absolute http, https, ws, or wss URL") ||
 		!strings.Contains(stderr.String(), "- requests must contain at least one request") {
 		t.Fatalf("expected grouped validation errors, got stderr=%s", stderr.String())
 	}

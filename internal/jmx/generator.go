@@ -42,6 +42,10 @@ func Render(s *spec.Spec) string {
 	b.WriteString("      <hashTree>\n")
 	writeDataSets(&b, s)
 	for _, request := range s.Requests {
+		if request.Protocol == "websocket" {
+			writeWebSocketSampler(&b, s, request)
+			continue
+		}
 		writeHTTPSampler(&b, s, request)
 	}
 	b.WriteString("      </hashTree>\n")
@@ -158,6 +162,180 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 		writeStatusAssertion(b, r.Expect.Status)
 	}
 	b.WriteString("        </hashTree>\n")
+}
+
+func writeWebSocketSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
+	wsURL := r.WebSocket.URL
+	if wsURL == "" {
+		base := strings.TrimRight(s.Target, "/")
+		path := r.Path
+		if path == "" {
+			path = "/"
+		}
+		wsURL = base + path
+	}
+
+	server, port, wsPath, useTLS := parseWebSocketURL(wsURL)
+	connectTimeoutMs := 20000
+	if r.WebSocket.Timeout.Set {
+		connectTimeoutMs = r.WebSocket.Timeout.Seconds * 1000
+	}
+	readTimeoutMs := connectTimeoutMs
+	messages := r.WebSocket.Messages
+
+	// Single request-response: one send with one expect.
+	if len(messages) == 1 && messages[0].Expect != nil {
+		if messages[0].Expect.Timeout.Set {
+			readTimeoutMs = messages[0].Expect.Timeout.Seconds * 1000
+		}
+		payloadType := "Text"
+		if messages[0].Type == "binary" {
+			payloadType = "Binary"
+		}
+		writeRequestResponseSampler(b, r.Name, server, port, wsPath, useTLS, connectTimeoutMs, readTimeoutMs, messages[0].Send, payloadType, true)
+		writeResponseAssertion(b, messages[0])
+		return
+	}
+
+	// Multi-message: Open + Write/Read pairs + Close, wrapped in a Transaction Controller.
+	fmt.Fprintf(b, `        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="%s" enabled="true">`+"\n", esc(r.Name))
+	b.WriteString("          <boolProp name=\"TransactionController.includeTimers\">false</boolProp>\n")
+	b.WriteString("          <boolProp name=\"TransactionController.parent\">true</boolProp>\n")
+	b.WriteString("        </TransactionController>\n")
+	b.WriteString("        <hashTree>\n")
+
+	// Open connection.
+	writeOpenConnectionSampler(b, r.Name+" - open", server, port, wsPath, useTLS, connectTimeoutMs, readTimeoutMs)
+
+	// Send/Read messages.
+	for i, msg := range messages {
+		if msg.Delay.Set && msg.Delay.Seconds > 0 {
+			writeConstantTimer(b, msg.Delay.Seconds*1000)
+		}
+		msgReadTimeout := readTimeoutMs
+		if msg.Expect != nil && msg.Expect.Timeout.Set {
+			msgReadTimeout = msg.Expect.Timeout.Seconds * 1000
+		}
+		payloadType := "Text"
+		if msg.Type == "binary" {
+			payloadType = "Binary"
+		}
+
+		if msg.Expect != nil {
+			// Send and expect response in one sampler (reuse connection from Open).
+			writeRequestResponseSampler(b, fmt.Sprintf("%s - msg %d", r.Name, i), server, port, wsPath, useTLS, connectTimeoutMs, msgReadTimeout, msg.Send, payloadType, false)
+			writeResponseAssertion(b, msg)
+		} else {
+			// Fire-and-forget write.
+			writeSingleWriteSampler(b, fmt.Sprintf("%s - send %d", r.Name, i), connectTimeoutMs, msgReadTimeout, msg.Send, payloadType)
+		}
+	}
+
+	// Close connection.
+	writeCloseSampler(b, r.Name+" - close", readTimeoutMs)
+
+	b.WriteString("        </hashTree>\n")
+}
+
+// parseWebSocketURL extracts server, port, path, and TLS from a ws:// or wss:// URL.
+func parseWebSocketURL(rawURL string) (server string, port string, path string, useTLS bool) {
+	useTLS = strings.HasPrefix(rawURL, "wss://")
+	cleaned := strings.TrimPrefix(strings.TrimPrefix(rawURL, "wss://"), "ws://")
+	parts := strings.SplitN(cleaned, "/", 2)
+	hostPort := parts[0]
+	path = "/"
+	if len(parts) > 1 {
+		path = "/" + parts[1]
+	}
+	if strings.Contains(hostPort, ":") {
+		hp := strings.SplitN(hostPort, ":", 2)
+		server = hp[0]
+		port = hp[1]
+	} else {
+		server = hostPort
+		if useTLS {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return
+}
+
+func writeOpenConnectionSampler(b *strings.Builder, name, server, port, path string, useTLS bool, connectTimeoutMs, readTimeoutMs int) {
+	fmt.Fprintf(b, `          <eu.luminis.jmeter.wssampler.OpenWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.OpenWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler" testname="%s" enabled="true">`+"\n", esc(name))
+	fmt.Fprintf(b, "            <stringProp name=\"server\">%s</stringProp>\n", esc(server))
+	fmt.Fprintf(b, "            <stringProp name=\"port\">%s</stringProp>\n", esc(port))
+	fmt.Fprintf(b, "            <stringProp name=\"path\">%s</stringProp>\n", esc(path))
+	fmt.Fprintf(b, "            <boolProp name=\"TLS\">%t</boolProp>\n", useTLS)
+	fmt.Fprintf(b, "            <stringProp name=\"connectTimeout\">%d</stringProp>\n", connectTimeoutMs)
+	fmt.Fprintf(b, "            <stringProp name=\"readTimeout\">%d</stringProp>\n", readTimeoutMs)
+	b.WriteString("          </eu.luminis.jmeter.wssampler.OpenWebSocketSampler>\n")
+	b.WriteString("          <hashTree/>\n")
+}
+
+func writeRequestResponseSampler(b *strings.Builder, name, server, port, path string, useTLS bool, connectTimeoutMs, readTimeoutMs int, requestData, payloadType string, createNew bool) {
+	fmt.Fprintf(b, `        <eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler" testname="%s" enabled="true">`+"\n", esc(name))
+	fmt.Fprintf(b, "          <boolProp name=\"createNewConnection\">%t</boolProp>\n", createNew)
+	fmt.Fprintf(b, "          <boolProp name=\"TLS\">%t</boolProp>\n", useTLS)
+	fmt.Fprintf(b, "          <stringProp name=\"server\">%s</stringProp>\n", esc(server))
+	fmt.Fprintf(b, "          <stringProp name=\"port\">%s</stringProp>\n", esc(port))
+	fmt.Fprintf(b, "          <stringProp name=\"path\">%s</stringProp>\n", esc(path))
+	fmt.Fprintf(b, "          <stringProp name=\"connectTimeout\">%d</stringProp>\n", connectTimeoutMs)
+	fmt.Fprintf(b, "          <stringProp name=\"readTimeout\">%d</stringProp>\n", readTimeoutMs)
+	fmt.Fprintf(b, "          <stringProp name=\"requestData\">%s</stringProp>\n", esc(requestData))
+	fmt.Fprintf(b, "          <stringProp name=\"payloadType\">%s</stringProp>\n", payloadType)
+	b.WriteString("        </eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler>\n")
+}
+
+
+func writeSingleWriteSampler(b *strings.Builder, name string, connectTimeoutMs, readTimeoutMs int, requestData, payloadType string) {
+	fmt.Fprintf(b, `          <eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler" testname="%s" enabled="true">`+"\n", esc(name))
+	fmt.Fprintf(b, "            <boolProp name=\"createNewConnection\">false</boolProp>\n")
+	fmt.Fprintf(b, "            <stringProp name=\"connectTimeout\">%d</stringProp>\n", connectTimeoutMs)
+	fmt.Fprintf(b, "            <stringProp name=\"readTimeout\">%d</stringProp>\n", readTimeoutMs)
+	fmt.Fprintf(b, "            <stringProp name=\"requestData\">%s</stringProp>\n", esc(requestData))
+	fmt.Fprintf(b, "            <stringProp name=\"payloadType\">%s</stringProp>\n", payloadType)
+	b.WriteString("          </eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler>\n")
+	b.WriteString("          <hashTree/>\n")
+}
+
+func writeCloseSampler(b *strings.Builder, name string, readTimeoutMs int) {
+	fmt.Fprintf(b, `          <eu.luminis.jmeter.wssampler.CloseWebSocketSampler guiclass="eu.luminis.jmeter.wssampler.CloseWebSocketSamplerGui" testclass="eu.luminis.jmeter.wssampler.CloseWebSocketSampler" testname="%s" enabled="true">`+"\n", esc(name))
+	fmt.Fprintf(b, "            <stringProp name=\"readTimeout\">%d</stringProp>\n", readTimeoutMs)
+	b.WriteString("            <boolProp name=\"createNewConnection\">false</boolProp>\n")
+	b.WriteString("          </eu.luminis.jmeter.wssampler.CloseWebSocketSampler>\n")
+	b.WriteString("          <hashTree/>\n")
+}
+
+func writeConstantTimer(b *strings.Builder, delayMs int) {
+	b.WriteString("          <ConstantTimer guiclass=\"ConstantTimerGui\" testclass=\"ConstantTimer\" testname=\"Delay\" enabled=\"true\">\n")
+	fmt.Fprintf(b, "            <stringProp name=\"ConstantTimer.delay\">%d</stringProp>\n", delayMs)
+	b.WriteString("          </ConstantTimer>\n")
+	b.WriteString("          <hashTree/>\n")
+}
+
+func writeResponseAssertion(b *strings.Builder, msg spec.WSMessage) {
+	if msg.Expect == nil || msg.Expect.Contains == "" {
+		b.WriteString("        <hashTree/>\n")
+		return
+	}
+	b.WriteString("        <hashTree>\n")
+	b.WriteString("          <ResponseAssertion guiclass=\"AssertionGui\" testclass=\"ResponseAssertion\" testname=\"contains assertion\" enabled=\"true\">\n")
+	b.WriteString("            <collectionProp name=\"Asserion.test_strings\">\n")
+	fmt.Fprintf(b, "              <stringProp name=\"0\">%s</stringProp>\n", esc(msg.Expect.Contains))
+	b.WriteString("            </collectionProp>\n")
+	b.WriteString("            <stringProp name=\"Assertion.test_field\">Assertion.response_data</stringProp>\n")
+	b.WriteString("            <intProp name=\"Assertion.test_type\">16</intProp>\n") // 16 = Substring
+	b.WriteString("          </ResponseAssertion>\n")
+	b.WriteString("          <hashTree/>\n")
+	b.WriteString("        </hashTree>\n")
+}
+
+func scriptString(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return escaped
 }
 
 func writeQueryArguments(b *strings.Builder, query map[string]string) {

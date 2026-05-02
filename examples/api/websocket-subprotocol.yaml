@@ -1,0 +1,22 @@
+name: websocket-subprotocol
+target: wss://ws.postman-echo.com/raw
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: ws with subprotocol
+    protocol: websocket
+    path: /
+    websocket:
+      subprotocol: echo-protocol
+      headers:
+        X-Custom-Header: test-value
+      timeout: 5s
+      messages:
+        - send: ping
+          expect:
+            contains: ping
+thresholds:
+  error_rate_lt: 100
+  p95_ms_lt: 3000

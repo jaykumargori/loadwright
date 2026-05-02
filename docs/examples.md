@@ -82,6 +82,30 @@ bin/loadwright run examples/api/timeouts.yaml --ci
 
 Demonstrates default and request-specific timeouts.
 
+## WebSocket Echo
+
+```bash
+bin/loadwright run examples/api/websocket-echo.yaml --ci
+```
+
+Demonstrates a WebSocket request that sends one message and checks the first response.
+
+## WebSocket Multi-Message
+
+```bash
+bin/loadwright run examples/api/websocket-multi.yaml --ci
+```
+
+Demonstrates a multi-message WebSocket sequence with delays and per-message assertions.
+
+## WebSocket Subprotocol
+
+```bash
+bin/loadwright run examples/api/websocket-subprotocol.yaml --ci
+```
+
+Demonstrates WebSocket subprotocol negotiation and custom handshake headers.
+
 ## OpenAPI Import
 
 ```bash

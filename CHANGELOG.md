@@ -5,6 +5,10 @@
 - Remove the legacy Python prototype from the public repository.
 - Add public project-status badges and initial prototype attribution.
 - Add mailmap attribution for Jaykumar Gori's earlier commit identities.
+- Enhance WebSocket spec support with multi-message sequences, binary frames, delays, subprotocol negotiation, custom handshake headers, per-message assertions, and close timeout.
+- Add `websocket-multi` and `websocket-subprotocol` examples.
+- Add backward compatibility for legacy `websocket.message` and `websocket.expect_contains` fields.
+- Update spec reference, examples, and limitations documentation for WebSocket changes.
 
 ## 0.1.0 - 2026-04-25
 

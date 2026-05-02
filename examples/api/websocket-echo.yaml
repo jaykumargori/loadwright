@@ -1,0 +1,18 @@
+name: websocket-echo
+target: wss://ws.postman-echo.com/raw
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: websocket ping
+    protocol: websocket
+    path: /
+    websocket:
+      message: hello
+      expect_contains: hello
+      timeout: 5s
+thresholds:
+  error_rate_lt: 100
+  p95_ms_lt: 5000
+  avg-ms-lt: 3000
