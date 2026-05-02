@@ -26,6 +26,14 @@ bin/loadwright run examples/api/post-json.yaml --ci
 
 Demonstrates JSON request bodies and custom headers.
 
+## Urlencoded Form
+
+```bash
+bin/loadwright run examples/api/form-urlencoded.yaml --ci
+```
+
+Demonstrates `application/x-www-form-urlencoded` request bodies with `body_form`.
+
 ## Checkout Flow
 
 ```bash
@@ -114,6 +122,32 @@ bin/loadwright compile /tmp/petstore-loadwright.yaml -o /tmp/petstore.jmx
 ```
 
 Demonstrates generating a starter Loadwright spec from OpenAPI 3.x.
+
+## Postman Import
+
+```bash
+bin/loadwright import postman examples/postman/checkout-api.postman_collection.json -o /tmp/checkout-loadwright.yaml
+bin/loadwright compile /tmp/checkout-loadwright.yaml -o /tmp/checkout.jmx
+```
+
+Demonstrates generating a starter Loadwright spec from a Postman Collection v2.1 file.
+
+## HAR Import
+
+```bash
+bin/loadwright import har examples/har/checkout.har -o /tmp/checkout-har-loadwright.yaml
+bin/loadwright compile /tmp/checkout-har-loadwright.yaml -o /tmp/checkout-har.jmx
+```
+
+Demonstrates generating a starter Loadwright spec from a HAR 1.2 traffic capture.
+
+## GitHub Actions
+
+```bash
+cp examples/github-actions/loadwright-pr.yml .github/workflows/loadwright.yml
+```
+
+Demonstrates a downstream CI workflow with fast pull request validation and a threshold-gated smoke run on `main`.
 
 ## CSV Users
 

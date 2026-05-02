@@ -9,6 +9,16 @@
 - Add `websocket-multi` and `websocket-subprotocol` examples.
 - Add backward compatibility for legacy `websocket.message` and `websocket.expect_contains` fields.
 - Update spec reference, examples, and limitations documentation for WebSocket changes.
+- Add initial Postman Collection v2.1 import support.
+- Add initial HAR 1.2 import support.
+- Improve Markdown and HTML reports with endpoint triage tables.
+- Add a copy-paste GitHub Actions workflow example for downstream CI adoption.
+- Add latest-run metadata for default `loadwright run` result directories.
+- Add `loadwright compare` for Markdown comparisons between two `summary.json` files.
+- Add per-run `run.json` metadata manifests.
+- Import basic OpenAPI HTTP bearer/basic security schemes.
+- Import Postman urlencoded and text form-data bodies as starter bodies with warnings.
+- Add first-class `body_json`, `body_text`, and runnable urlencoded `body_form` request bodies.
 
 ## 0.1.0 - 2026-04-25
 

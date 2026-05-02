@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -118,6 +119,25 @@ func TestParseReportArgsErrors(t *testing.T) {
 	}
 }
 
+func TestParseCompareArgs(t *testing.T) {
+	baseline, candidate, output, err := parseCompareArgs([]string{"baseline.json", "candidate.json", "--out=comparison.md"})
+	if err != nil {
+		t.Fatalf("parseCompareArgs() error = %v", err)
+	}
+	if baseline != "baseline.json" || candidate != "candidate.json" || output != "comparison.md" {
+		t.Fatalf("unexpected args: baseline=%q candidate=%q output=%q", baseline, candidate, output)
+	}
+}
+
+func TestParseCompareArgsErrors(t *testing.T) {
+	if _, _, _, err := parseCompareArgs([]string{"baseline.json"}); err == nil {
+		t.Fatalf("expected missing candidate error")
+	}
+	if _, _, _, err := parseCompareArgs([]string{"baseline.json", "candidate.json", "--out"}); err == nil {
+		t.Fatalf("expected missing output value error")
+	}
+}
+
 func TestParseDoctorArgs(t *testing.T) {
 	deep, image, err := parseDoctorArgs([]string{"--deep", "--image=custom:jmeter"})
 	if err != nil {
@@ -140,6 +160,26 @@ func TestParseImportOpenAPIArgs(t *testing.T) {
 		t.Fatalf("parseImportOpenAPIArgs() error = %v", err)
 	}
 	if input != "openapi.yaml" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
+		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
+func TestParseImportPostmanArgs(t *testing.T) {
+	input, output, baseURL, err := parseImportPostmanArgs([]string{"collection.json", "--out=loadwright.yaml", "--base-url", "https://staging.example.com"})
+	if err != nil {
+		t.Fatalf("parseImportPostmanArgs() error = %v", err)
+	}
+	if input != "collection.json" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
+		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
+func TestParseImportHARArgs(t *testing.T) {
+	input, output, baseURL, err := parseImportHARArgs([]string{"capture.har", "-o", "loadwright.yaml", "--base-url=https://staging.example.com"})
+	if err != nil {
+		t.Fatalf("parseImportHARArgs() error = %v", err)
+	}
+	if input != "capture.har" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
 		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
 	}
 }
@@ -307,9 +347,138 @@ paths:
 	}
 }
 
+func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	collection := `{
+  "info": {"name": "CLI Import"},
+  "variable": [{"key": "base_url", "value": "https://api.example.com"}],
+  "item": [
+    {
+      "name": "Create user",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"name\":\"Ada\"}", "options": {"raw": {"language": "json"}}},
+        "url": "{{base_url}}/users"
+      }
+    },
+    {
+      "name": "Upload",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {"key": "title", "value": "avatar"},
+            {"key": "avatar", "type": "file", "src": "/tmp/avatar.png"}
+          ]
+        },
+        "url": "{{base_url}}/upload"
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {"key": "username", "value": "demo"},
+            {"key": "password", "value": "secret"}
+          ]
+        },
+        "url": "{{base_url}}/login"
+      }
+    }
+  ]
+}`
+	if err := os.WriteFile("collection.json", []byte(collection), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "postman", "collection.json", "-o", "loadwright.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(import postman) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile("loadwright.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "target: '{{base_url}}'") ||
+		!strings.Contains(string(data), "name: Create user") ||
+		!strings.Contains(string(data), "name: Ada") ||
+		!strings.Contains(string(data), "title: avatar") ||
+		!strings.Contains(string(data), "body_form:") ||
+		!strings.Contains(string(data), "username: demo") {
+		t.Fatalf("unexpected imported spec: %s", data)
+	}
+	if !strings.Contains(stderr.String(), `warning: Upload: form-data file field "avatar" was skipped`) ||
+		!strings.Contains(stderr.String(), "warning: Upload: form-data fields imported as a flat object starter body; review multipart encoding before CI use") {
+		t.Fatalf("expected warning, got stderr=%s", stderr.String())
+	}
+}
+
+func TestRunImportHARCreatesSpecAndWarnings(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	capture := `{
+  "log": {
+    "version": "1.2",
+    "entries": [
+      {
+        "request": {
+          "method": "GET",
+          "url": "https://api.example.com/users?limit=10",
+          "headers": [{"name": "Accept", "value": "application/json"}],
+          "queryString": [{"name": "active", "value": true}]
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.example.com/users",
+          "headers": [{"name": "Content-Type", "value": "application/json"}],
+          "postData": {
+            "mimeType": "application/json",
+            "text": "{\"name\":\"Ada\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "https://other.example.com/health"
+        }
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile("capture.har", []byte(capture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "har", "capture.har", "-o", "loadwright.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(import har) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile("loadwright.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "target: https://api.example.com") ||
+		!strings.Contains(string(data), "name: GET /users") ||
+		!strings.Contains(string(data), "name: Ada") {
+		t.Fatalf("unexpected imported spec: %s", data)
+	}
+	if !strings.Contains(stderr.String(), "warning: GET /health uses target https://other.example.com; imported path will run against https://api.example.com") {
+		t.Fatalf("expected warning, got stderr=%s", stderr.String())
+	}
+}
+
 func TestRunImportRejectsUnsupportedSource(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"import", "postman", "collection.json"}, &stdout, &stderr)
+	code := Run([]string{"import", "insomnia", "export.json"}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "unsupported import source") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
@@ -360,6 +529,77 @@ func TestRunReportFailsCIOnThresholds(t *testing.T) {
 	}
 }
 
+func TestRunCompareWritesMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	baseline := `{
+  "total_samples": 2,
+  "successful": 2,
+  "failed": 0,
+  "error_rate": 0,
+  "average_ms": 100,
+  "p95_ms": 150,
+  "p99_ms": 180,
+  "endpoints": {
+    "GET /health": {"count": 2, "failed": 0, "average_ms": 100, "p95_ms": 150}
+  }
+}`
+	candidate := `{
+  "total_samples": 2,
+  "successful": 1,
+  "failed": 1,
+  "error_rate": 50,
+  "average_ms": 250,
+  "p95_ms": 400,
+  "p99_ms": 450,
+  "endpoints": {
+    "GET /health": {"count": 2, "failed": 1, "average_ms": 250, "p95_ms": 400}
+  }
+}`
+	if err := os.WriteFile("baseline.json", []byte(baseline), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("candidate.json", []byte(candidate), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compare", "baseline.json", "candidate.json", "--out", "comparison.md"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(compare) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile("comparison.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# Loadwright Comparison") ||
+		!strings.Contains(string(data), "| Failed samples | 0 | 1 | +1 |") ||
+		!strings.Contains(string(data), "| GET /health | changed | 0 | 1 | +50.00% | +150.00 ms | +250.00 ms |") {
+		t.Fatalf("unexpected comparison:\n%s", data)
+	}
+	if !strings.Contains(stdout.String(), "wrote comparison.md") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestRunComparePrintsMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	if err := os.WriteFile("baseline.json", []byte(`{"total_samples":1,"endpoints":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("candidate.json", []byte(`{"total_samples":2,"endpoints":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compare", "baseline.json", "candidate.json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(compare) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "| Total samples | 1 | 2 | +1 |") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
 func TestRunCompileRejectsInvalidSpec(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
@@ -407,7 +647,7 @@ thresholds:
 	if code != 0 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html", "junit.xml"} {
+	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html", "junit.xml", "run.json"} {
 		if _, err := os.Stat(filepath.Join("results", "smoke", name)); err != nil {
 			t.Fatalf("expected %s: %v", name, err)
 		}
@@ -419,6 +659,181 @@ thresholds:
 	if !strings.Contains(string(summary), `"total_samples": 1`) ||
 		!strings.Contains(string(summary), `"failed": 0`) {
 		t.Fatalf("unexpected summary: %s", summary)
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "smoke", "run.json"))
+	if manifest.RunID != "smoke" || manifest.Input != "spec.yaml" || manifest.InputType != "yaml" || !manifest.GeneratedJMX {
+		t.Fatalf("unexpected run manifest: %+v", manifest)
+	}
+	if manifest.JMX != filepath.ToSlash(filepath.Join("results", "smoke", "shim-run.jmx")) {
+		t.Fatalf("unexpected JMX path: %+v", manifest)
+	}
+	if manifest.Image != "justb4/jmeter:latest" || !manifest.CI {
+		t.Fatalf("unexpected run flags: %+v", manifest)
+	}
+	if manifest.Artifacts.ReportHTML != filepath.ToSlash(filepath.Join("results", "smoke", "index.html")) ||
+		manifest.Artifacts.ResultsJTL != filepath.ToSlash(filepath.Join("results", "smoke", "results.jtl")) {
+		t.Fatalf("unexpected artifacts: %+v", manifest.Artifacts)
+	}
+	if manifest.StartedAt == "" || manifest.FinishedAt == "" {
+		t.Fatalf("expected timestamps: %+v", manifest)
+	}
+}
+
+func TestRunSpecDefaultOutputCreatesLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: latest-run
+target: https://example.com
+requests:
+  - name: health
+    path: /health
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	metadata := readLatestRun(t, filepath.Join("results", "latest.json"))
+	if metadata.RunID == "" {
+		t.Fatalf("expected run_id in latest metadata: %+v", metadata)
+	}
+	if metadata.RunDir != filepath.ToSlash(filepath.Join("results", metadata.RunID)) {
+		t.Fatalf("unexpected run_dir: %+v", metadata)
+	}
+	if metadata.Report != filepath.ToSlash(filepath.Join("results", metadata.RunID, "index.html")) {
+		t.Fatalf("unexpected report path: %+v", metadata)
+	}
+	if _, err := os.Stat(filepath.FromSlash(metadata.Report)); err != nil {
+		t.Fatalf("expected latest report path to exist: %v", err)
+	}
+	manifest := readRunManifest(t, filepath.Join("results", metadata.RunID, "run.json"))
+	if manifest.RunID != metadata.RunID || manifest.Artifacts.ReportHTML != metadata.Report {
+		t.Fatalf("latest metadata and run manifest disagree: latest=%+v run=%+v", metadata, manifest)
+	}
+}
+
+func TestRunSpecExplicitOutputDoesNotCreateLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: explicit-run
+target: https://example.com
+requests:
+  - path: /health
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--out-dir", "results/manual"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join("results", "latest.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no latest pointer for explicit out-dir, err=%v", err)
+	}
+}
+
+func TestRunSpecThresholdFailureStillCreatesLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: failing-latest-run
+target: https://example.com
+requests:
+  - name: health
+    path: /health
+thresholds:
+  p95_ms_lt: 1
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--ci"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "thresholds failed") {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	metadata := readLatestRun(t, filepath.Join("results", "latest.json"))
+	if metadata.Report == "" {
+		t.Fatalf("expected latest metadata despite threshold failure: %+v", metadata)
+	}
+	if _, err := os.Stat(filepath.FromSlash(metadata.Report)); err != nil {
+		t.Fatalf("expected latest report path to exist: %v", err)
+	}
+}
+
+func TestRunExistingJMXCreatesRunManifest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	if err := os.WriteFile("existing.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "existing.jmx", "--out-dir", "results/jmx-smoke", "--image", "custom:jmeter"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run existing JMX) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "jmx-smoke", "run.json"))
+	if manifest.Input != "existing.jmx" || manifest.InputType != "jmx" || manifest.GeneratedJMX {
+		t.Fatalf("unexpected JMX manifest: %+v", manifest)
+	}
+	if manifest.JMX != "existing.jmx" || manifest.Image != "custom:jmeter" || manifest.CI {
+		t.Fatalf("unexpected JMX manifest fields: %+v", manifest)
+	}
+}
+
+func TestRunManifestDoesNotIncludeEnvValues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: secret-run
+target: https://example.com
+variables:
+  token: ${API_TOKEN}
+auth:
+  type: bearer
+  token: "{{token}}"
+requests:
+  - path: /secure
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".env.test", []byte("API_TOKEN=super-secret-token\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--env-file", ".env.test", "--out-dir", "results/secret"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join("results", "secret", "run.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "super-secret-token") || strings.Contains(string(data), "API_TOKEN") || strings.Contains(string(data), ".env.test") {
+		t.Fatalf("run manifest leaked env data: %s", data)
 	}
 }
 
@@ -436,6 +851,32 @@ func chdir(t *testing.T, dir string) {
 			t.Fatalf("restore working directory: %v", err)
 		}
 	})
+}
+
+func readLatestRun(t *testing.T, path string) latestRun {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata latestRun
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	return metadata
+}
+
+func readRunManifest(t *testing.T, path string) runManifest {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest runManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	return manifest
 }
 
 func installDockerShim(t *testing.T, dir string) {

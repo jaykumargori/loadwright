@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -9,8 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devaryakjha/loadwright/internal/har"
 	"github.com/devaryakjha/loadwright/internal/jmx"
 	"github.com/devaryakjha/loadwright/internal/openapi"
+	"github.com/devaryakjha/loadwright/internal/postman"
 	"github.com/devaryakjha/loadwright/internal/report"
 	"github.com/devaryakjha/loadwright/internal/runtime"
 	"github.com/devaryakjha/loadwright/internal/spec"
@@ -41,6 +44,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return run(args[1:], stdout, stderr)
 	case "report":
 		return reportCommand(args[1:], stdout, stderr)
+	case "compare":
+		return compareCommand(args[1:], stdout, stderr)
 	case "import":
 		return importCommand(args[1:], stdout, stderr)
 	default:
@@ -58,10 +63,13 @@ Usage:
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+  loadwright import postman <collection.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+  loadwright import har <capture.har> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright validate <spec.yaml> [--env-file .env.test]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
   loadwright report <results.jtl> [--out-dir results/report] [--error-rate-lt 1] [--p95-ms-lt 3000] [--avg-ms-lt 1000] [--ci]
+  loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparison.md]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
@@ -71,7 +79,8 @@ Commands:
   validate  Validate a YAML spec without compiling or running JMeter
   compile   Compile a YAML spec to JMeter JMX
   run       Run a YAML spec or existing JMX through Dockerized JMeter
-  report    Generate reports from an existing JMeter JTL file`)
+  report    Generate reports from an existing JMeter JTL file
+  compare   Compare two Loadwright summary.json files`)
 }
 
 func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -182,7 +191,9 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	runID := time.Now().UTC().Format("20060102-150405")
+	startedAt := time.Now().UTC()
+	updateLatest := outputDir == ""
+	runID := startedAt.Format("20060102-150405")
 	if outputDir == "" {
 		outputDir = filepath.Join("results", runID)
 	}
@@ -193,6 +204,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	var thresholds spec.Thresholds
 	jmxPath := input
+	generatedJMX := false
 	workDir := "."
 	if isYAML(input) {
 		loaded, err := loadResolvedSpec(input, envFile)
@@ -206,6 +218,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "compile failed: %v\n", err)
 			return 1
 		}
+		generatedJMX = true
 		workDir = outputDir
 		fmt.Fprintf(stdout, "compiled %s\n", jmxPath)
 	}
@@ -232,12 +245,128 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "write report failed: %v\n", err)
 		return 1
 	}
+	finishedAt := time.Now().UTC()
+	if err := writeRunManifest(runManifest{
+		RunID:        filepath.Base(outputDir),
+		Input:        filepath.ToSlash(input),
+		InputType:    runInputType(input),
+		JMX:          filepath.ToSlash(jmxPath),
+		GeneratedJMX: generatedJMX,
+		Image:        image,
+		CI:           ci,
+		StartedAt:    startedAt.Format(time.RFC3339),
+		FinishedAt:   finishedAt.Format(time.RFC3339),
+		Artifacts: runArtifacts{
+			ResultsJTL:  filepath.ToSlash(filepath.Join(outputDir, jtlName)),
+			SummaryJSON: filepath.ToSlash(filepath.Join(outputDir, "summary.json")),
+			SummaryMD:   filepath.ToSlash(filepath.Join(outputDir, "summary.md")),
+			ReportHTML:  filepath.ToSlash(filepath.Join(outputDir, "index.html")),
+			JUnitXML:    filepath.ToSlash(filepath.Join(outputDir, "junit.xml")),
+		},
+	}, outputDir); err != nil {
+		fmt.Fprintf(stderr, "write run metadata failed: %v\n", err)
+		return 1
+	}
+	if updateLatest {
+		if err := writeLatestRun("results", outputDir, finishedAt); err != nil {
+			fmt.Fprintf(stderr, "warning: update latest run pointer: %v\n", err)
+		}
+	}
 	fmt.Fprintf(stdout, "report %s\n", filepath.Join(outputDir, "index.html"))
 	if ci && !summary.Passed() {
 		fmt.Fprintln(stderr, "thresholds failed")
 		return 1
 	}
 	return 0
+}
+
+type runManifest struct {
+	RunID        string       `json:"run_id"`
+	Input        string       `json:"input"`
+	InputType    string       `json:"input_type"`
+	JMX          string       `json:"jmx"`
+	GeneratedJMX bool         `json:"generated_jmx"`
+	Image        string       `json:"image"`
+	CI           bool         `json:"ci"`
+	StartedAt    string       `json:"started_at"`
+	FinishedAt   string       `json:"finished_at"`
+	Artifacts    runArtifacts `json:"artifacts"`
+}
+
+type runArtifacts struct {
+	ResultsJTL  string `json:"results_jtl"`
+	SummaryJSON string `json:"summary_json"`
+	SummaryMD   string `json:"summary_md"`
+	ReportHTML  string `json:"report_html"`
+	JUnitXML    string `json:"junit_xml"`
+}
+
+func writeRunManifest(manifest runManifest, outputDir string) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(outputDir, "run.json"), data, 0o644)
+}
+
+func runInputType(path string) string {
+	if isYAML(path) {
+		return "yaml"
+	}
+	return "jmx"
+}
+
+type latestRun struct {
+	RunID     string `json:"run_id"`
+	RunDir    string `json:"run_dir"`
+	Report    string `json:"report"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func writeLatestRun(resultsRoot string, outputDir string, updatedAt time.Time) error {
+	if err := os.MkdirAll(resultsRoot, 0o755); err != nil {
+		return err
+	}
+	runDir := filepath.Clean(outputDir)
+	relativeRunDir, err := filepath.Rel(resultsRoot, runDir)
+	if err == nil && !strings.HasPrefix(relativeRunDir, "..") && relativeRunDir != "." {
+		runDir = filepath.ToSlash(filepath.Join(resultsRoot, relativeRunDir))
+	}
+	metadata := latestRun{
+		RunID:     filepath.Base(outputDir),
+		RunDir:    filepath.ToSlash(runDir),
+		Report:    filepath.ToSlash(filepath.Join(runDir, "index.html")),
+		UpdatedAt: updatedAt.Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	latestPath := filepath.Join(resultsRoot, "latest.json")
+	if err := os.WriteFile(latestPath, data, 0o644); err != nil {
+		return err
+	}
+	writeLatestSymlink(resultsRoot, outputDir)
+	return nil
+}
+
+func writeLatestSymlink(resultsRoot string, outputDir string) {
+	latestPath := filepath.Join(resultsRoot, "latest")
+	if info, err := os.Lstat(latestPath); err == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			return
+		}
+		if err := os.Remove(latestPath); err != nil {
+			return
+		}
+	}
+	target, err := filepath.Rel(resultsRoot, outputDir)
+	if err != nil || strings.HasPrefix(target, "..") || target == "." {
+		return
+	}
+	_ = os.Symlink(target, latestPath)
 }
 
 func reportCommand(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -269,6 +398,39 @@ func reportCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
+func compareCommand(args []string, stdout io.Writer, stderr io.Writer) int {
+	baselinePath, candidatePath, output, err := parseCompareArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	baseline, err := report.LoadSummaryFile(baselinePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load baseline summary failed: %v\n", err)
+		return 1
+	}
+	candidate, err := report.LoadSummaryFile(candidatePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load candidate summary failed: %v\n", err)
+		return 1
+	}
+	markdown := report.RenderComparisonMarkdown(report.CompareSummaries(baseline, candidate))
+	if output == "" {
+		fmt.Fprint(stdout, markdown)
+		return 0
+	}
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		fmt.Fprintf(stderr, "create comparison output dir: %v\n", err)
+		return 1
+	}
+	if err := os.WriteFile(output, []byte(markdown), 0o644); err != nil {
+		fmt.Fprintf(stderr, "write comparison failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
 func importCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "import requires a source type")
@@ -277,6 +439,10 @@ func importCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "openapi":
 		return importOpenAPI(args[1:], stdout, stderr)
+	case "postman":
+		return importPostman(args[1:], stdout, stderr)
+	case "har":
+		return importHAR(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported import source: %s\n", args[0])
 		return 2
@@ -300,6 +466,56 @@ func importOpenAPI(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err := spec.WriteFile(imported, output); err != nil {
 		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
 		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
+func importPostman(args []string, stdout io.Writer, stderr io.Writer) int {
+	input, output, baseURL, err := parseImportPostmanArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	result, err := postman.ImportFile(input, postman.Options{BaseURL: baseURL})
+	if err != nil {
+		fmt.Fprintf(stderr, "import failed: %v\n", err)
+		return 1
+	}
+	if output == "" {
+		output = "loadwright.yaml"
+	}
+	if err := spec.WriteFile(result.Spec, output); err != nil {
+		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
+		return 1
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
+func importHAR(args []string, stdout io.Writer, stderr io.Writer) int {
+	input, output, baseURL, err := parseImportHARArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	result, err := har.ImportFile(input, har.Options{BaseURL: baseURL})
+	if err != nil {
+		fmt.Fprintf(stderr, "import failed: %v\n", err)
+		return 1
+	}
+	if output == "" {
+		output = "loadwright.yaml"
+	}
+	if err := spec.WriteFile(result.Spec, output); err != nil {
+		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
+		return 1
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
 	}
 	fmt.Fprintf(stdout, "wrote %s\n", output)
 	return 0
@@ -517,6 +733,31 @@ func parseReportArgs(args []string) (jtlPath string, outputDir string, threshold
 	return positional[0], outputDir, thresholds, ci, nil
 }
 
+func parseCompareArgs(args []string) (baselinePath string, candidatePath string, output string, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-o" || arg == "--out":
+			i++
+			if i >= len(args) {
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			output = args[i]
+		case strings.HasPrefix(arg, "-o="):
+			output = strings.TrimPrefix(arg, "-o=")
+		case strings.HasPrefix(arg, "--out="):
+			output = strings.TrimPrefix(arg, "--out=")
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 2 {
+		return "", "", "", fmt.Errorf("compare requires exactly two summary paths")
+	}
+	return positional[0], positional[1], output, nil
+}
+
 func parseThresholdValue(flag string, raw string) (float64, error) {
 	value, err := strconv.ParseFloat(raw, 64)
 	if err != nil || value < 0 {
@@ -526,6 +767,18 @@ func parseThresholdValue(flag string, raw string) (float64, error) {
 }
 
 func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("openapi", args)
+}
+
+func parseImportPostmanArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("postman", args)
+}
+
+func parseImportHARArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("har", args)
+}
+
+func parseImportArgs(source string, args []string) (input string, output string, baseURL string, err error) {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -553,7 +806,7 @@ func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL
 		}
 	}
 	if len(positional) != 1 {
-		return "", "", "", fmt.Errorf("import openapi requires exactly one input file")
+		return "", "", "", fmt.Errorf("import %s requires exactly one input file", source)
 	}
 	return positional[0], output, baseURL, nil
 }

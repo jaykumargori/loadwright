@@ -7,6 +7,7 @@ Loadwright `v0.1.0` is intentionally focused on HTTP and WebSocket API load-test
 - YAML specs for HTTP API requests.
 - GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS requests.
 - Query params, headers, JSON/string bodies, expected HTTP status assertions.
+- Urlencoded form bodies.
 - Basic and bearer auth helpers.
 - Environment files and simple variable substitution.
 - CSV data sources.
@@ -14,16 +15,17 @@ Loadwright `v0.1.0` is intentionally focused on HTTP and WebSocket API load-test
 - Dockerized JMeter execution.
 - Reports from Loadwright runs or existing JMeter JTL files.
 - Initial OpenAPI 3.x import for simple HTTP APIs.
+- Initial Postman Collection v2.1 import for common HTTP API collections.
+- Initial HAR 1.2 import for common HTTP API traffic captures.
 
 ## Not Yet In Scope
 
 - Full JMeter GUI feature parity.
 - JMeter plugin management.
-- Postman collection import.
-- HAR import.
 - Distributed load generation across multiple workers.
 - Historical trend storage.
 - Browser-level performance testing.
+- Multipart form-data request rendering.
 - AI-assisted spec generation or result explanation.
 
 ## Compatibility Boundary

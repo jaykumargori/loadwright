@@ -40,9 +40,9 @@ func TestImportYAMLOperations(t *testing.T) {
 	if post.Name != "createPet" || post.Method != "POST" || post.Expect.Status != 201 {
 		t.Fatalf("unexpected POST request: %+v", post)
 	}
-	body := post.Body.(map[string]any)
+	body := post.BodyJSON.(map[string]any)
 	if body["name"] != "example" || body["tag"] != "example" {
-		t.Fatalf("unexpected body: %+v", body)
+		t.Fatalf("unexpected body_json: %+v", body)
 	}
 }
 
@@ -121,13 +121,79 @@ func TestImportExamplesAndSchemaFallbacks(t *testing.T) {
 	for index, request := range imported.Requests {
 		requests[request.Name] = index
 	}
-	body := imported.Requests[requests["POST /items"]].Body.(map[string]any)
+	body := imported.Requests[requests["POST /items"]].BodyJSON.(map[string]any)
 	if body["name"] != "from-example" {
 		t.Fatalf("example body not used: %+v", body)
 	}
 	flags := imported.Requests[requests["GET /flags"]]
 	if flags.Query["enabled"] != "true" || flags.Query["count"] != "1" {
 		t.Fatalf("query examples not generated: %+v", flags.Query)
+	}
+}
+
+func TestImportGlobalBearerSecurity(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "Bearer API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"bearerAuth": {Type: "http", Scheme: "bearer", BearerFormat: "JWT"},
+		}},
+		Security: []SecurityRequirement{{"bearerAuth": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if imported.Auth.Type != "bearer" || imported.Auth.Token != "{{api_token}}" {
+		t.Fatalf("auth = %+v", imported.Auth)
+	}
+	if imported.Variables["api_token"] != "replace-me" {
+		t.Fatalf("api_token variable = %q", imported.Variables["api_token"])
+	}
+}
+
+func TestImportGlobalBasicSecurity(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "Basic API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"basicAuth": {Type: "http", Scheme: "basic"},
+		}},
+		Security: []SecurityRequirement{{"basicAuth": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if imported.Auth.Type != "basic" || imported.Auth.Username != "{{basic_username}}" || imported.Auth.Password != "{{basic_password}}" {
+		t.Fatalf("auth = %+v", imported.Auth)
+	}
+	if imported.Variables["basic_username"] != "replace-me" || imported.Variables["basic_password"] != "replace-me" {
+		t.Fatalf("variables = %+v", imported.Variables)
+	}
+}
+
+func TestImportIgnoresUnsupportedSecuritySchemes(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "API Key API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"apiKey": {Type: "apiKey", In: "header", Name: "X-API-Key"},
+		}},
+		Security: []SecurityRequirement{{"apiKey": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if !imported.Auth.IsZero() {
+		t.Fatalf("unsupported auth should not be imported: %+v", imported.Auth)
 	}
 }
 
