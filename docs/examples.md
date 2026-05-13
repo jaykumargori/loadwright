@@ -92,7 +92,10 @@ Demonstrates default and request-specific timeouts.
 
 ## WebSocket Echo
 
+WebSocket specs require a plugin-enabled JMeter image. Build it once from the bundled Dockerfile (extends `justb4/jmeter:latest` with the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin), then reuse it for all WebSocket examples:
+
 ```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .
 bin/loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
@@ -101,6 +104,7 @@ Demonstrates a WebSocket request that sends one message and checks the first res
 ## WebSocket Multi-Message
 
 ```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .  # skip if already built
 bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
@@ -109,6 +113,7 @@ Demonstrates a multi-message WebSocket sequence with delays and per-message asse
 ## WebSocket Subprotocol
 
 ```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .  # skip if already built
 bin/loadwright run examples/api/websocket-subprotocol.yaml --ci --image loadwright/jmeter-websocket:latest
 ```
 
