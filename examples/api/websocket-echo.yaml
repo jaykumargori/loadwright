@@ -15,4 +15,4 @@ requests:
 thresholds:
   error_rate_lt: 100
   p95_ms_lt: 5000
-  avg-ms-lt: 3000
+  avg_ms_lt: 3000
