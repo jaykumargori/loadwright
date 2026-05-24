@@ -32,6 +32,13 @@ docker build -t loadwright/jmeter-websocket:5.6.3 -f docker/jmeter/Dockerfile .
 
 Use `loadwright doctor --deep --image <image:tag>` to verify that the configured image pulls and starts on your machine before running a load test.
 
+WebSocket specs require the bundled plugin-enabled image until plugin setup is automated:
+
+```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .
+loadwright doctor --deep --image loadwright/jmeter-websocket:latest
+```
+
 ## Docker
 
 Docker is required for `loadwright run`, `loadwright doctor`, and `loadwright doctor --deep`. The basic doctor checks verify the Docker CLI, daemon reachability, writable directories, and image availability. The deep check also starts JMeter in the configured image.
@@ -42,6 +49,8 @@ Docker is not required for:
 - `loadwright validate`
 - `loadwright compile`
 - `loadwright import openapi`
+- `loadwright import postman`
+- `loadwright import har`
 - `loadwright report`
 
 ## Spec Stability
