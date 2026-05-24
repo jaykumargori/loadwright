@@ -11,7 +11,45 @@ import (
 	"strings"
 )
 
-const DefaultJMeterImage = "justb4/jmeter:latest"
+const DefaultJMeterImage = "justb4/jmeter:5.6.3"
+
+type ErrorKind string
+
+const (
+	ErrorDockerUnavailable ErrorKind = "docker unavailable"
+	ErrorImagePull         ErrorKind = "image pull failed"
+	ErrorJMeterStartup     ErrorKind = "jmeter startup failed"
+	ErrorTestExecution     ErrorKind = "test execution failed"
+)
+
+type RuntimeError struct {
+	Kind     ErrorKind
+	Image    string
+	Cause    error
+	Output   string
+	Recovery string
+}
+
+func (e *RuntimeError) Error() string {
+	if e == nil {
+		return ""
+	}
+	message := string(e.Kind)
+	if e.Image != "" {
+		message += " for image " + e.Image
+	}
+	if e.Cause != nil {
+		message += ": " + e.Cause.Error()
+	}
+	return message
+}
+
+func (e *RuntimeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
 
 type RunOptions struct {
 	Image      string
@@ -79,6 +117,15 @@ func RunJMeter(options RunOptions) error {
 	if err != nil || relJMX == "." || relJMX == ".." || strings.HasPrefix(relJMX, ".."+string(filepath.Separator)) {
 		return errors.New("JMX file must be inside the working directory")
 	}
+	if err := requireDockerDaemon(options.Image); err != nil {
+		return err
+	}
+	if err := ensureImage(options.Image); err != nil {
+		return err
+	}
+	if err := probeJMeterStartup(options.Image); err != nil {
+		return err
+	}
 
 	args := []string{
 		"run", "--rm",
@@ -92,7 +139,15 @@ func RunJMeter(options RunOptions) error {
 	cmd := exec.Command("docker", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return &RuntimeError{
+			Kind:     ErrorTestExecution,
+			Image:    options.Image,
+			Cause:    err,
+			Recovery: testExecutionRecovery(relJMX),
+		}
+	}
+	return nil
 }
 
 func checkCommand(command string, name string) Check {
@@ -104,9 +159,13 @@ func checkCommand(command string, name string) Check {
 
 func checkDocker() Check {
 	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return Check{Name: "Docker daemon", Passed: false, Message: "docker daemon is not reachable"}
+		message := "Docker CLI is installed, but the Docker daemon is not reachable. Start Docker Desktop or your Docker service, then run `docker version` and retry."
+		if detail := strings.TrimSpace(string(output)); detail != "" {
+			message += " Docker said: " + oneLine(detail)
+		}
+		return Check{Name: "Docker daemon", Passed: false, Message: message}
 	}
 	return Check{Name: "Docker daemon", Passed: true, Message: "server " + stringTrim(output)}
 }
@@ -127,9 +186,18 @@ func checkWritableDir(path string, name string) Check {
 
 func checkImage(image string) Check {
 	cmd := exec.Command("docker", "image", "inspect", image, "--format", "{{.Architecture}}")
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return Check{Name: "JMeter image", Passed: true, Message: image + " not local; Docker will pull it on first run"}
+		pull := exec.Command("docker", "pull", image)
+		pullOutput, pullErr := pull.CombinedOutput()
+		if pullErr != nil {
+			message := fmt.Sprintf("could not pull %s. Check network access, registry auth, and the image tag.", image)
+			if detail := strings.TrimSpace(string(pullOutput)); detail != "" {
+				message += " Docker said: " + oneLine(detail)
+			}
+			return Check{Name: "JMeter image", Passed: false, Message: message}
+		}
+		return Check{Name: "JMeter image", Passed: true, Message: image + " pulled successfully"}
 	}
 	arch := stringTrim(output)
 	message := image + " available"
@@ -140,16 +208,92 @@ func checkImage(image string) Check {
 }
 
 func checkJMeterRuntime(image string) Check {
-	cmd := exec.Command("docker", "run", "--rm", image, "--version")
-	output, err := cmd.CombinedOutput()
+	output, err := runJMeterVersion(image)
 	if err != nil {
-		return Check{Name: "JMeter runtime", Passed: false, Message: err.Error()}
+		message := fmt.Sprintf("Docker started %s but JMeter did not report a version.", image)
+		if detail := strings.TrimSpace(output); detail != "" {
+			message += " Output: " + oneLine(detail)
+		}
+		return Check{Name: "JMeter runtime", Passed: false, Message: message}
 	}
-	version := firstVersionLine(string(output))
+	version := firstVersionLine(output)
 	if version == "" {
 		version = "started successfully"
 	}
 	return Check{Name: "JMeter runtime", Passed: true, Message: version}
+}
+
+func requireDockerDaemon(image string) error {
+	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	return &RuntimeError{
+		Kind:     ErrorDockerUnavailable,
+		Image:    image,
+		Cause:    err,
+		Output:   string(output),
+		Recovery: "Start Docker Desktop or your Docker service, confirm `docker version` shows a Server version, then retry `loadwright run`.",
+	}
+}
+
+func ensureImage(image string) error {
+	inspect := exec.Command("docker", "image", "inspect", image, "--format", "{{.Id}}")
+	if err := inspect.Run(); err == nil {
+		return nil
+	}
+	pull := exec.Command("docker", "pull", image)
+	output, err := pull.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	return &RuntimeError{
+		Kind:     ErrorImagePull,
+		Image:    image,
+		Cause:    err,
+		Output:   string(output),
+		Recovery: "Check your network, registry credentials, and image tag. You can override the runtime with `loadwright run ... --image <image:tag>`.",
+	}
+}
+
+func probeJMeterStartup(image string) error {
+	output, err := runJMeterVersion(image)
+	if err == nil && firstVersionLine(output) != "" {
+		return nil
+	}
+	if err == nil {
+		err = errors.New("JMeter version was not found in container output")
+	}
+	return &RuntimeError{
+		Kind:     ErrorJMeterStartup,
+		Image:    image,
+		Cause:    err,
+		Output:   output,
+		Recovery: "Run `loadwright doctor --deep` for the same image. If this is a custom image, verify it can run `jmeter --version` or `--version` successfully.",
+	}
+}
+
+func runJMeterVersion(image string) (string, error) {
+	cmd := exec.Command("docker", "run", "--rm", image, "--version")
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func testExecutionRecovery(relJMX string) string {
+	message := fmt.Sprintf("Docker and JMeter started, but the test plan %s failed during execution. Check the generated jmeter.log in the results directory when available.", filepath.ToSlash(relJMX))
+	if strings.Contains(relJMX, "websocket") {
+		message += " WebSocket specs require an image with the WebSocket Samplers plugin, for example the image built from docker/jmeter/Dockerfile."
+	}
+	return message
+}
+
+func oneLine(value string) string {
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.Join(fields, " ")
 }
 
 func firstVersionLine(output string) string {

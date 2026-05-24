@@ -1,4 +1,4 @@
-FROM justb4/jmeter:latest
+FROM justb4/jmeter:5.6.3
 
 # Install the WebSocket Samplers plugin by Peter Doornbosch (v1.3.2)
 # https://github.com/ptrd/jmeter-websocket-samplers

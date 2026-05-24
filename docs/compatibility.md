@@ -16,17 +16,25 @@ Release builds target:
 
 ## JMeter
 
-Generated plans target Apache JMeter 5.6.x-era JMX properties. The default runtime image is:
+Generated plans target Apache JMeter 5.6.x-era JMX properties. The default HTTP runtime image is pinned to the tested JMeter line:
 
 ```text
-justb4/jmeter:latest
+justb4/jmeter:5.6.3
 ```
 
-Use `loadwright doctor --deep` to verify that the configured image starts on your machine.
+Loadwright does not use floating `latest` tags as its support boundary. Patch releases may move to a newer pinned JMeter tag after the CLI, generated JMX, and report flow are tested against that image.
+
+HTTP specs use the default image unless `--image` is provided. WebSocket specs require a plugin-enabled image because the generated JMX uses the WebSocket Samplers plugin. Build the bundled image with:
+
+```sh
+docker build -t loadwright/jmeter-websocket:5.6.3 -f docker/jmeter/Dockerfile .
+```
+
+Use `loadwright doctor --deep --image <image:tag>` to verify that the configured image pulls and starts on your machine before running a load test.
 
 ## Docker
 
-Docker is required for `loadwright run` and `loadwright doctor --deep`.
+Docker is required for `loadwright run`, `loadwright doctor`, and `loadwright doctor --deep`. The basic doctor checks verify the Docker CLI, daemon reachability, writable directories, and image availability. The deep check also starts JMeter in the configured image.
 
 Docker is not required for:
 
