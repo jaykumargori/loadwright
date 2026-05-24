@@ -260,8 +260,6 @@ func TestHTTPRequestRejectedWhenTargetIsWebSocket(t *testing.T) {
 	}
 }
 
-
-
 func TestLoadFileParsesThresholdsAndRequestShape(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "spec.yaml")
