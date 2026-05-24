@@ -1055,15 +1055,16 @@ fi
 echo "CannotResolveClassException: eu.luminis.jmeter.wssampler.OpenWebSocketSampler" >&2
 exit 1
 `)
-	if err := os.WriteFile("websocket.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+	if err := os.WriteFile("checkout-flow.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"run", "websocket.jmx", "--out-dir", "results/test-fail"}, &stdout, &stderr)
+	code := Run([]string{"run", "checkout-flow.jmx", "--out-dir", "results/test-fail"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "test execution failed: justb4/jmeter:5.6.3") ||
+		!strings.Contains(stderr.String(), "CannotResolveClassException") ||
 		!strings.Contains(stderr.String(), "WebSocket specs require an image") {
 		t.Fatalf("expected test execution failure, got stderr=%s", stderr.String())
 	}

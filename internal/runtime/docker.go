@@ -137,14 +137,17 @@ func RunJMeter(options RunOptions) error {
 		"-l", "/work/" + filepath.ToSlash(filepath.Join(mustRel(absWorkDir, resultsAbs), options.JTLName)),
 	}
 	cmd := exec.Command("docker", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	output, err := cmd.CombinedOutput()
+	if len(output) > 0 {
+		_, _ = os.Stderr.Write(output)
+	}
+	if err != nil {
 		return &RuntimeError{
 			Kind:     ErrorTestExecution,
 			Image:    options.Image,
 			Cause:    err,
-			Recovery: testExecutionRecovery(relJMX),
+			Output:   string(output),
+			Recovery: testExecutionRecovery(string(output)),
 		}
 	}
 	return nil
@@ -280,12 +283,18 @@ func runJMeterVersion(image string) (string, error) {
 	return string(output), err
 }
 
-func testExecutionRecovery(relJMX string) string {
-	message := fmt.Sprintf("Docker and JMeter started, but the test plan %s failed during execution. Check the generated jmeter.log in the results directory when available.", filepath.ToSlash(relJMX))
-	if strings.Contains(relJMX, "websocket") {
+func testExecutionRecovery(output string) string {
+	message := "Docker and JMeter started, but the test plan failed during execution. Check the generated jmeter.log in the results directory when available."
+	if looksLikeMissingWebSocketPlugin(output) {
 		message += " WebSocket specs require an image with the WebSocket Samplers plugin, for example the image built from docker/jmeter/Dockerfile."
 	}
 	return message
+}
+
+func looksLikeMissingWebSocketPlugin(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "cannotresolveclassexception") &&
+		strings.Contains(lower, "eu.luminis.jmeter.wssampler")
 }
 
 func oneLine(value string) string {
