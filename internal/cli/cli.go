@@ -222,6 +222,9 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		workDir = outputDir
 		fmt.Fprintf(stdout, "compiled %s\n", jmxPath)
 	}
+	if image == "" {
+		image = runtime.DefaultJMeterImage
+	}
 
 	jtlName := "results.jtl"
 	err = runtime.RunJMeter(runtime.RunOptions{

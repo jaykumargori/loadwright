@@ -251,3 +251,207 @@ func TestRenderCSVDataSet(t *testing.T) {
 		}
 	}
 }
+
+// --- WebSocket Sampler Tests (using eu.luminis.jmeter.wssampler plugin) ---
+
+func TestRenderWebSocketSampler(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "ws",
+		Target: "wss://echo.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:     "echo ping",
+			Protocol: "websocket",
+			Path:     "/socket",
+			WebSocket: spec.WebSocket{
+				Subprotocol: "echo-protocol",
+				Headers: map[string]string{
+					"X-Custom-Header": "test-value",
+				},
+				Timeout: spec.Duration{Seconds: 3, Set: true},
+				Messages: []spec.WSMessage{{
+					Send: "ping",
+					Type: "text",
+					Expect: &spec.WSExpect{
+						Contains: "pong",
+						Timeout:  spec.Duration{Seconds: 3, Set: true},
+					},
+				}},
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler"`,
+		`testname="echo ping"`,
+		`<stringProp name="server">echo.example.com</stringProp>`,
+		`<stringProp name="port">443</stringProp>`,
+		`<stringProp name="path">/socket</stringProp>`,
+		`<boolProp name="TLS">true</boolProp>`,
+		`<stringProp name="connectTimeout">3000</stringProp>`,
+		`<stringProp name="readTimeout">3000</stringProp>`,
+		`<stringProp name="requestData">ping</stringProp>`,
+		`<boolProp name="createNewConnection">true</boolProp>`,
+		`<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="WebSocket Handshake Headers" enabled="true">`,
+		`<stringProp name="Header.name">Sec-WebSocket-Protocol</stringProp>`,
+		`<stringProp name="Header.value">echo-protocol</stringProp>`,
+		`<stringProp name="Header.name">X-Custom-Header</stringProp>`,
+		`<stringProp name="Header.value">test-value</stringProp>`,
+		// Response assertion for expect_contains
+		`<stringProp name="0">pong</stringProp>`,
+		`Assertion.response_data`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("websocket JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderWebSocketMultiMessage(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "ws-multi",
+		Target: "wss://echo.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:     "multi",
+			Protocol: "websocket",
+			WebSocket: spec.WebSocket{
+				Timeout: spec.Duration{Seconds: 5, Set: true},
+				CloseTimeout: spec.Duration{
+					Seconds: 2,
+					Set:     true,
+				},
+				Messages: []spec.WSMessage{
+					{Send: "hello", Type: "text", Expect: &spec.WSExpect{Contains: "hello", Timeout: spec.Duration{Seconds: 5, Set: true}}},
+					{Send: "world", Type: "text"},
+				},
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		// Transaction controller wraps multi-message
+		`testclass="TransactionController" testname="multi"`,
+		// Open connection
+		`testclass="eu.luminis.jmeter.wssampler.OpenWebSocketSampler"`,
+		// First message: request-response with reuse
+		`testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler"`,
+		`<stringProp name="requestData">hello</stringProp>`,
+		`<boolProp name="createNewConnection">false</boolProp>`,
+		// Second message: fire-and-forget write
+		`testclass="eu.luminis.jmeter.wssampler.SingleWriteWebSocketSampler"`,
+		`<stringProp name="requestData">world</stringProp>`,
+		// Close connection
+		`testclass="eu.luminis.jmeter.wssampler.CloseWebSocketSampler"`,
+		`<stringProp name="readTimeout">2000</stringProp>`,
+		// Contains assertion for first message
+		`<stringProp name="0">hello</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("multi-message JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderWebSocketBinaryMessage(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "ws-bin",
+		Target: "wss://echo.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:     "binary",
+			Protocol: "websocket",
+			WebSocket: spec.WebSocket{
+				Messages: []spec.WSMessage{{Send: "aGVsbG8=", Type: "binary", Expect: &spec.WSExpect{Contains: "hello"}}},
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	if !strings.Contains(rendered, `<stringProp name="payloadType">Binary</stringProp>`) {
+		t.Fatalf("binary JMX missing Binary payloadType\n%s", rendered)
+	}
+}
+
+func TestRenderWebSocketWithDelay(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "ws-delay",
+		Target: "wss://echo.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:     "delay",
+			Protocol: "websocket",
+			WebSocket: spec.WebSocket{
+				Messages: []spec.WSMessage{
+					{Send: "first", Type: "text", Expect: &spec.WSExpect{Contains: "first"}},
+					{Send: "delayed", Type: "text", Delay: spec.Duration{Seconds: 2, Set: true}},
+				},
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	if !strings.Contains(rendered, `<stringProp name="ConstantTimer.delay">2000</stringProp>`) {
+		t.Fatalf("delay JMX missing ConstantTimer\n%s", rendered)
+	}
+}
+
+func TestRenderWebSocketLegacyCompat(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "ws-legacy",
+		Target: "wss://echo.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:     "legacy",
+			Protocol: "websocket",
+			Path:     "/echo",
+			WebSocket: spec.WebSocket{
+				Message:        "ping",
+				ExpectContains: "pong",
+				Timeout:        spec.Duration{Seconds: 5, Set: true},
+			},
+		}},
+	}
+	// NormalizeAndValidate normalizes legacy fields into Messages[].
+	if err := loaded.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`testclass="eu.luminis.jmeter.wssampler.RequestResponseWebSocketSampler"`,
+		`<stringProp name="requestData">ping</stringProp>`,
+		`<stringProp name="connectTimeout">5000</stringProp>`,
+		`<stringProp name="0">pong</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("legacy compat JMX missing %q\n%s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderWebSocketURLParsing(t *testing.T) {
+	tests := []struct {
+		url    string
+		server string
+		port   string
+		path   string
+		useTLS bool
+	}{
+		{"wss://echo.example.com/socket", "echo.example.com", "443", "/socket", true},
+		{"ws://localhost:8080/ws", "localhost", "8080", "/ws", false},
+		{"wss://example.com", "example.com", "443", "/", true},
+		{"ws://example.com:9090/path/to/ws", "example.com", "9090", "/path/to/ws", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			server, port, path, useTLS := parseWebSocketURL(tt.url)
+			if server != tt.server || port != tt.port || path != tt.path || useTLS != tt.useTLS {
+				t.Fatalf("parseWebSocketURL(%q) = (%q, %q, %q, %t), want (%q, %q, %q, %t)",
+					tt.url, server, port, path, useTLS, tt.server, tt.port, tt.path, tt.useTLS)
+			}
+		})
+	}
+}

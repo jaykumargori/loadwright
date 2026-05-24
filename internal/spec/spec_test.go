@@ -91,6 +91,7 @@ func TestSpecValidationFailures(t *testing.T) {
 		{name: "bad loops", spec: Spec{Name: "bad", Target: "https://example.com", Load: Load{Loops: intPtr(0)}, Requests: []Request{{Path: "/x"}}}, want: "load.loops"},
 		{name: "no requests", spec: Spec{Name: "bad", Target: "https://example.com"}, want: "requests"},
 		{name: "bad auth", spec: Spec{Name: "bad", Target: "https://example.com", Auth: Auth{Type: "bearer"}, Requests: []Request{{Path: "/x"}}}, want: "auth.token"},
+		{name: "bad protocol", spec: Spec{Name: "bad", Target: "https://example.com", Requests: []Request{{Protocol: "gopher", Path: "/x"}}}, want: "protocol is not supported"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,7 +118,7 @@ func TestSpecValidationCollectsMultipleFailures(t *testing.T) {
 	}
 	for _, want := range []string{
 		"name is required",
-		"target must be an absolute http or https URL",
+		"target must be an absolute http, https, ws, or wss URL",
 		"load.users must be greater than 0",
 		"load.loops must be greater than 0",
 		"requests[0].method is not supported: TRACE",
@@ -162,6 +163,11 @@ func TestRequestValidationScenarios(t *testing.T) {
 			request: Request{Method: "TRACE", Path: "/health"},
 			want:    "method is not supported",
 		},
+		{
+			name:    "websocket with invalid url",
+			request: Request{Protocol: "websocket", WebSocket: WebSocket{URL: "http://example.com"}},
+			want:    "websocket.url must use ws or wss",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -170,6 +176,87 @@ func TestRequestValidationScenarios(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestWebSocketRequestValidationAndDefaults(t *testing.T) {
+	raw := Spec{
+		Name:   "ws",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			Path:     "/chat",
+			Timeout:  Duration{Seconds: 4, Set: true},
+			WebSocket: WebSocket{
+				Message:        "ping",
+				ExpectContains: "pong",
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	request := raw.Requests[0]
+	if request.Protocol != "websocket" {
+		t.Fatalf("protocol = %q", request.Protocol)
+	}
+	if request.Name != "WS /chat" {
+		t.Fatalf("name = %q", request.Name)
+	}
+	if request.WebSocket.Timeout.Seconds != 4 {
+		t.Fatalf("timeout was not propagated: %+v", request.WebSocket.Timeout)
+	}
+}
+
+func TestWebSocketRequestRejectsHTTPFields(t *testing.T) {
+	request := Request{
+		Protocol: "websocket",
+		Path:     "/chat",
+		Headers:  map[string]string{"x-test": "1"},
+	}
+	err := request.NormalizeAndValidate(0)
+	if err == nil || !strings.Contains(err.Error(), "websocket requests only support websocket.* fields") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestWebSocketRequestRequiresURLWhenTargetIsHTTP(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-on-http-target",
+		Target: "https://example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			Path:     "/socket",
+		}},
+	}
+	err := raw.NormalizeAndValidate()
+	if err == nil || !strings.Contains(err.Error(), "websocket.url is required when target is not ws or wss") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestHTTPRequestRejectedWhenTargetIsWebSocket(t *testing.T) {
+	// Regression: HTTP requests with a ws/wss target must fail validation fast
+	// instead of silently compiling to an invalid HTTPSamplerProxy with protocol=ws.
+	// Minimal repro from maintainer review:
+	//   name: mixed
+	//   target: ws://echo.example.com
+	//   requests:
+	//     - method: GET
+	//       path: /health
+	for _, scheme := range []string{"ws", "wss"} {
+		raw := Spec{
+			Name:   "mixed",
+			Target: scheme + "://echo.example.com",
+			Requests: []Request{{
+				Method: "GET",
+				Path:   "/health",
+			}},
+		}
+		err := raw.NormalizeAndValidate()
+		if err == nil || !strings.Contains(err.Error(), "HTTP request but target uses scheme") {
+			t.Fatalf("scheme=%s: expected HTTP-on-ws-target error, got %v", scheme, err)
+		}
 	}
 }
 
@@ -478,6 +565,176 @@ func TestDataSetValidationFailures(t *testing.T) {
 				t.Fatalf("error = %v, want substring %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestWebSocketMultiMessageValidation(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-multi",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			Path:     "/chat",
+			WebSocket: WebSocket{
+				Timeout: Duration{Seconds: 10, Set: true},
+				Messages: []WSMessage{
+					{Send: "hello", Expect: &WSExpect{Contains: "hello"}},
+					{Send: "world", Delay: Duration{Seconds: 1, Set: true}},
+				},
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	msgs := raw.Requests[0].WebSocket.Messages
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].Type != "text" {
+		t.Fatalf("type = %q", msgs[0].Type)
+	}
+	if msgs[0].Expect.Timeout.Seconds != 10 {
+		t.Fatalf("expect timeout was not inherited: %+v", msgs[0].Expect.Timeout)
+	}
+}
+
+func TestWebSocketLegacyNormalizesToMessages(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-legacy",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			Path:     "/echo",
+			WebSocket: WebSocket{
+				Message:        "ping",
+				ExpectContains: "pong",
+				Timeout:        Duration{Seconds: 5, Set: true},
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	msgs := raw.Requests[0].WebSocket.Messages
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].Send != "ping" || msgs[0].Expect == nil || msgs[0].Expect.Contains != "pong" {
+		t.Fatalf("legacy not normalized: %+v", msgs[0])
+	}
+}
+
+func TestWebSocketRejectsMixedLegacyAndMessages(t *testing.T) {
+	request := Request{
+		Protocol: "websocket",
+		WebSocket: WebSocket{
+			Message:  "legacy",
+			Messages: []WSMessage{{Send: "new"}},
+		},
+	}
+	err := request.NormalizeAndValidate(0)
+	if err == nil || !strings.Contains(err.Error(), "cannot mix legacy") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestWebSocketBinaryMessageValidation(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-binary",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			WebSocket: WebSocket{
+				Messages: []WSMessage{{Send: "aGVsbG8=", Type: "binary"}},
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+
+	rawBad := Spec{
+		Name:   "ws-binary-bad",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			WebSocket: WebSocket{
+				Messages: []WSMessage{{Send: "not-valid-base64!!!", Type: "binary"}},
+			},
+		}},
+	}
+	err := rawBad.NormalizeAndValidate()
+	if err == nil || !strings.Contains(err.Error(), "valid base64") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestWebSocketSubprotocolAndHeaders(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-sub",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			WebSocket: WebSocket{
+				Subprotocol: "graphql-ws",
+				Headers:     map[string]string{"Authorization": "Bearer token"},
+				Messages:    []WSMessage{{Send: "init"}},
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	if raw.Requests[0].WebSocket.Subprotocol != "graphql-ws" {
+		t.Fatalf("subprotocol = %q", raw.Requests[0].WebSocket.Subprotocol)
+	}
+}
+
+func TestWebSocketResolveVariablesInMessages(t *testing.T) {
+	raw := Spec{
+		Name:      "ws-vars",
+		Target:    "wss://echo.example.com",
+		Variables: map[string]string{"greeting": "hello"},
+		Requests: []Request{{
+			Protocol: "websocket",
+			WebSocket: WebSocket{
+				Messages: []WSMessage{{
+					Send:   "{{greeting}}",
+					Expect: &WSExpect{Contains: "{{greeting}}"},
+				}},
+			},
+		}},
+	}
+	resolved, err := raw.Resolve(nil)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	msgs := resolved.Requests[0].WebSocket.Messages
+	if msgs[0].Send != "hello" || msgs[0].Expect.Contains != "hello" {
+		t.Fatalf("variable not resolved: %+v", msgs[0])
+	}
+}
+
+func TestWebSocketDelayValidation(t *testing.T) {
+	raw := Spec{
+		Name:   "ws-delay",
+		Target: "wss://echo.example.com",
+		Requests: []Request{{
+			Protocol: "websocket",
+			WebSocket: WebSocket{
+				Messages: []WSMessage{{
+					Send:  "delayed",
+					Delay: Duration{Seconds: 2, Set: true},
+				}},
+			},
+		}},
+	}
+	if err := raw.NormalizeAndValidate(); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+	if raw.Requests[0].WebSocket.Messages[0].Delay.Seconds != 2 {
+		t.Fatalf("delay = %+v", raw.Requests[0].WebSocket.Messages[0].Delay)
 	}
 }
 

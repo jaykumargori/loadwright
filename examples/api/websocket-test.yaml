@@ -1,0 +1,16 @@
+name: websocket-echo-test
+target: wss://echo.websocket.org
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: websocket ping
+    protocol: websocket
+    path: /
+    websocket:
+      message: loadwright-ping
+      timeout: 5s
+thresholds:
+  error_rate_lt: 100
+  p95_ms_lt: 5000

@@ -14,6 +14,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// WSMessage describes a single WebSocket message in a multi-message sequence.
+type WSMessage struct {
+	Send   string    `yaml:"send"`
+	Type   string    `yaml:"type,omitempty"`
+	Expect *WSExpect `yaml:"expect,omitempty"`
+	Delay  Duration  `yaml:"delay,omitempty"`
+}
+
+// WSExpect describes the expected response for a single WebSocket message.
+type WSExpect struct {
+	Contains string   `yaml:"contains,omitempty"`
+	Timeout  Duration `yaml:"timeout,omitempty"`
+}
+
 type Duration struct {
 	Seconds int
 	Set     bool
@@ -114,18 +128,20 @@ type DataSet struct {
 }
 
 type Request struct {
-	Name     string            `yaml:"name"`
-	Method   string            `yaml:"method"`
-	Path     string            `yaml:"path"`
-	Headers  map[string]string `yaml:"headers,omitempty"`
-	Query    map[string]string `yaml:"query,omitempty"`
-	Body     any               `yaml:"body,omitempty"`
-	BodyJSON any               `yaml:"body_json,omitempty"`
-	BodyText string            `yaml:"body_text,omitempty"`
-	BodyForm map[string]string `yaml:"body_form,omitempty"`
-	Auth     Auth              `yaml:"auth,omitempty"`
-	Timeout  Duration          `yaml:"timeout,omitempty"`
-	Expect   Expect            `yaml:"expect"`
+	Name      string            `yaml:"name"`
+	Protocol  string            `yaml:"protocol,omitempty"`
+	Method    string            `yaml:"method"`
+	Path      string            `yaml:"path"`
+	Headers   map[string]string `yaml:"headers,omitempty"`
+	Query     map[string]string `yaml:"query,omitempty"`
+	Body      any               `yaml:"body,omitempty"`
+	BodyJSON  any               `yaml:"body_json,omitempty"`
+	BodyText  string            `yaml:"body_text,omitempty"`
+	BodyForm  map[string]string `yaml:"body_form,omitempty"`
+	Auth      Auth              `yaml:"auth,omitempty"`
+	Timeout   Duration          `yaml:"timeout,omitempty"`
+	Expect    Expect            `yaml:"expect"`
+	WebSocket WebSocket         `yaml:"websocket,omitempty"`
 }
 
 type Auth struct {
@@ -141,6 +157,22 @@ func (a Auth) IsZero() bool {
 
 type Expect struct {
 	Status int `yaml:"status"`
+}
+
+type WebSocket struct {
+	URL            string            `yaml:"url,omitempty"`
+	Message        string            `yaml:"message,omitempty"`
+	ExpectContains string            `yaml:"expect_contains,omitempty"`
+	Timeout        Duration          `yaml:"timeout,omitempty"`
+	Messages       []WSMessage       `yaml:"messages,omitempty"`
+	Subprotocol    string            `yaml:"subprotocol,omitempty"`
+	Headers        map[string]string `yaml:"headers,omitempty"`
+	CloseTimeout   Duration          `yaml:"close_timeout,omitempty"`
+}
+
+func (w WebSocket) IsZero() bool {
+	return w.URL == "" && w.Message == "" && w.ExpectContains == "" && !w.Timeout.Set &&
+		len(w.Messages) == 0 && w.Subprotocol == "" && len(w.Headers) == 0 && !w.CloseTimeout.Set
 }
 
 type Thresholds struct {
@@ -197,9 +229,9 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 	s.Target = strings.TrimRight(strings.TrimSpace(s.Target), "/")
 	parsedTarget, err := url.Parse(s.Target)
 	if err != nil || parsedTarget.Scheme == "" || parsedTarget.Host == "" {
-		validationErrors = append(validationErrors, errors.New("target must be an absolute http or https URL"))
-	} else if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
-		validationErrors = append(validationErrors, errors.New("target must use http or https"))
+		validationErrors = append(validationErrors, errors.New("target must be an absolute http, https, ws, or wss URL"))
+	} else if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" && parsedTarget.Scheme != "ws" && parsedTarget.Scheme != "wss" {
+		validationErrors = append(validationErrors, errors.New("target must use http, https, ws, or wss"))
 	}
 	if s.Variables == nil {
 		s.Variables = map[string]string{}
@@ -241,6 +273,14 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 			validationErrors = append(validationErrors, err)
 			continue
 		}
+		if s.Requests[index].Protocol == "websocket" && s.Requests[index].WebSocket.URL == "" {
+			if parsedTarget.Scheme != "ws" && parsedTarget.Scheme != "wss" {
+				validationErrors = append(validationErrors, fmt.Errorf("requests[%d].websocket.url is required when target is not ws or wss", index))
+			}
+		}
+		if s.Requests[index].Protocol != "websocket" && (parsedTarget.Scheme == "ws" || parsedTarget.Scheme == "wss") {
+			validationErrors = append(validationErrors, fmt.Errorf("requests[%d] is an HTTP request but target uses scheme %q; use an http or https target for HTTP requests", index, parsedTarget.Scheme))
+		}
 		if !s.Requests[index].Timeout.Set && s.Defaults.Timeout.Set {
 			s.Requests[index].Timeout = s.Defaults.Timeout
 		}
@@ -249,6 +289,21 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 }
 
 func (r *Request) NormalizeAndValidate(index int) error {
+	r.Protocol = strings.ToLower(strings.TrimSpace(r.Protocol))
+	if r.Protocol == "" {
+		r.Protocol = "http"
+	}
+	if r.Protocol == "ws" || r.Protocol == "websocket" {
+		r.Protocol = "websocket"
+		return r.normalizeAndValidateWebSocket(index)
+	}
+	if r.Protocol != "http" {
+		return fmt.Errorf("requests[%d].protocol is not supported: %s", index, r.Protocol)
+	}
+	return r.normalizeAndValidateHTTP(index)
+}
+
+func (r *Request) normalizeAndValidateHTTP(index int) error {
 	r.Method = strings.ToUpper(strings.TrimSpace(r.Method))
 	if r.Method == "" {
 		r.Method = "GET"
@@ -280,6 +335,94 @@ func (r *Request) NormalizeAndValidate(index int) error {
 	if err := r.Auth.NormalizeAndValidate(fmt.Sprintf("requests[%d].auth", index)); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *Request) normalizeAndValidateWebSocket(index int) error {
+	r.Method = ""
+	r.Path = strings.TrimSpace(r.Path)
+	if r.Path != "" && !strings.HasPrefix(r.Path, "/") {
+		return fmt.Errorf("requests[%d].path must start with /", index)
+	}
+	if strings.TrimSpace(r.Name) == "" {
+		if r.Path != "" {
+			r.Name = "WS " + r.Path
+		} else {
+			r.Name = "WS request"
+		}
+	}
+	if !r.Auth.IsZero() {
+		return fmt.Errorf("requests[%d].auth is not supported for websocket requests", index)
+	}
+	hasHTTPOnlyBody := r.Body != nil || r.BodyJSON != nil || strings.TrimSpace(r.BodyText) != "" || len(r.BodyForm) > 0
+	if len(r.Headers) > 0 || len(r.Query) > 0 || hasHTTPOnlyBody || r.Expect.Status > 0 {
+		return fmt.Errorf("requests[%d] websocket requests only support websocket.* fields plus optional path and timeout", index)
+	}
+	r.WebSocket.URL = strings.TrimSpace(r.WebSocket.URL)
+	if r.WebSocket.URL != "" {
+		parsedURL, err := url.Parse(r.WebSocket.URL)
+		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+			return fmt.Errorf("requests[%d].websocket.url must be an absolute ws or wss URL", index)
+		}
+		if parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss" {
+			return fmt.Errorf("requests[%d].websocket.url must use ws or wss", index)
+		}
+	}
+	if !r.WebSocket.Timeout.Set && r.Timeout.Set {
+		r.WebSocket.Timeout = r.Timeout
+	}
+
+	// Reject mixing legacy single-message fields with the new messages list.
+	hasLegacy := r.WebSocket.Message != "" || r.WebSocket.ExpectContains != ""
+	hasMessages := len(r.WebSocket.Messages) > 0
+	if hasLegacy && hasMessages {
+		return fmt.Errorf("requests[%d].websocket cannot mix legacy message/expect_contains with messages[]", index)
+	}
+
+	// Normalize legacy fields into a single-element Messages slice.
+	if hasLegacy {
+		msg := WSMessage{
+			Send: r.WebSocket.Message,
+			Type: "text",
+		}
+		if r.WebSocket.ExpectContains != "" {
+			msg.Expect = &WSExpect{Contains: r.WebSocket.ExpectContains}
+		}
+		r.WebSocket.Messages = []WSMessage{msg}
+	}
+
+	// Validate each message in the sequence.
+	for i := range r.WebSocket.Messages {
+		m := &r.WebSocket.Messages[i]
+		m.Send = strings.TrimSpace(m.Send)
+		if m.Send == "" {
+			return fmt.Errorf("requests[%d].websocket.messages[%d].send is required", index, i)
+		}
+		m.Type = strings.ToLower(strings.TrimSpace(m.Type))
+		if m.Type == "" {
+			m.Type = "text"
+		}
+		if m.Type != "text" && m.Type != "binary" {
+			return fmt.Errorf("requests[%d].websocket.messages[%d].type must be text or binary", index, i)
+		}
+		if m.Type == "binary" {
+			if _, err := base64.StdEncoding.DecodeString(m.Send); err != nil {
+				return fmt.Errorf("requests[%d].websocket.messages[%d].send must be valid base64 for binary type", index, i)
+			}
+		}
+		if m.Expect != nil && !m.Expect.Timeout.Set && r.WebSocket.Timeout.Set {
+			m.Expect.Timeout = r.WebSocket.Timeout
+		}
+	}
+
+	// Subprotocol is optional free-text.
+	r.WebSocket.Subprotocol = strings.TrimSpace(r.WebSocket.Subprotocol)
+
+	// Close timeout defaults to connection timeout.
+	if !r.WebSocket.CloseTimeout.Set && r.WebSocket.Timeout.Set {
+		r.WebSocket.CloseTimeout = r.WebSocket.Timeout
+	}
+
 	return nil
 }
 
@@ -407,6 +550,9 @@ func (s *Spec) Resolve(env map[string]string, opts ...NormalizeOption) (*Spec, e
 
 func (s *Spec) applyAuthHeaders() {
 	for index := range s.Requests {
+		if s.Requests[index].Protocol != "http" {
+			continue
+		}
 		auth := s.Auth
 		if s.Requests[index].Auth.Type != "" {
 			auth = s.Requests[index].Auth
@@ -460,6 +606,51 @@ func renderRequest(request Request, vars map[string]string, index int) (Request,
 	out.Auth, err = renderAuth(request.Auth, vars, fmt.Sprintf("requests[%d].auth", index))
 	if err != nil {
 		return Request{}, err
+	}
+	out.WebSocket, err = renderWebSocket(request.WebSocket, vars, index)
+	if err != nil {
+		return Request{}, err
+	}
+	return out, nil
+}
+
+func renderWebSocket(value WebSocket, vars map[string]string, index int) (WebSocket, error) {
+	var err error
+	out := value
+	if out.URL, err = renderString(value.URL, vars); err != nil {
+		return WebSocket{}, fmt.Errorf("requests[%d].websocket.url: %w", index, err)
+	}
+	if out.Message, err = renderString(value.Message, vars); err != nil {
+		return WebSocket{}, fmt.Errorf("requests[%d].websocket.message: %w", index, err)
+	}
+	if out.ExpectContains, err = renderString(value.ExpectContains, vars); err != nil {
+		return WebSocket{}, fmt.Errorf("requests[%d].websocket.expect_contains: %w", index, err)
+	}
+	if out.Subprotocol, err = renderString(value.Subprotocol, vars); err != nil {
+		return WebSocket{}, fmt.Errorf("requests[%d].websocket.subprotocol: %w", index, err)
+	}
+	if len(value.Headers) > 0 {
+		out.Headers, err = renderStringMap(value.Headers, vars)
+		if err != nil {
+			return WebSocket{}, fmt.Errorf("requests[%d].websocket.headers: %w", index, err)
+		}
+	}
+	if len(value.Messages) > 0 {
+		out.Messages = make([]WSMessage, len(value.Messages))
+		for i, msg := range value.Messages {
+			rendered := msg
+			if rendered.Send, err = renderString(msg.Send, vars); err != nil {
+				return WebSocket{}, fmt.Errorf("requests[%d].websocket.messages[%d].send: %w", index, i, err)
+			}
+			if msg.Expect != nil {
+				expect := *msg.Expect
+				if expect.Contains, err = renderString(msg.Expect.Contains, vars); err != nil {
+					return WebSocket{}, fmt.Errorf("requests[%d].websocket.messages[%d].expect.contains: %w", index, i, err)
+				}
+				rendered.Expect = &expect
+			}
+			out.Messages[i] = rendered
+		}
 	}
 	return out, nil
 }

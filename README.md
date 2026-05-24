@@ -15,7 +15,7 @@ It is not a new load-testing engine. It is a small automation layer that keeps J
 
 Loadwright is at `v0.1.0`. It is usable for HTTP API load-test workflows and CI smoke/performance checks, but the public API and YAML spec may still evolve before `v1.0.0`.
 
-The current development scope is intentionally focused: HTTP requests, JSON/text/form bodies, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. WebSocket support, plugin management, distributed runners, and AI-assisted workflows are planned later.
+The current development scope is intentionally focused: HTTP requests, WebSocket requests, JSON/text/form bodies, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. Plugin management, distributed runners, and AI-assisted workflows are planned later.
 
 ## Why This Exists
 
@@ -32,7 +32,7 @@ Use Loadwright when you want:
 - HAR-to-spec bootstrapping from browser/API traffic captures
 - future optional AI assistance without depending on AI for normal runs
 
-Current `v0.1.0` scope: HTTP API load tests. See [docs/limitations.md](docs/limitations.md) for known limits.
+Current `v0.1.0` scope: API load tests (HTTP and WebSocket). See [docs/limitations.md](docs/limitations.md) for known limits.
 
 ## Install From Source
 
@@ -132,6 +132,15 @@ loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparis
 ```
 
 `doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.
+
+For WebSocket specs, build the bundled plugin image first, then pass it with `--image`:
+
+```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .
+bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:latest
+```
+
+The `docker/jmeter/Dockerfile` extends `justb4/jmeter:latest` (the same base used for all HTTP runs) and adds the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin.
 
 ## Roadmap
 

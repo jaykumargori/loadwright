@@ -1,6 +1,6 @@
 # Limitations
 
-Loadwright `v0.1.0` is intentionally focused on HTTP API load-test workflows.
+Loadwright `v0.1.0` is intentionally focused on HTTP and WebSocket API load-test workflows.
 
 ## In Scope
 
@@ -11,6 +11,7 @@ Loadwright `v0.1.0` is intentionally focused on HTTP API load-test workflows.
 - Basic and bearer auth helpers.
 - Environment files and simple variable substitution.
 - CSV data sources.
+- WebSocket testing with multi-message sequences, subprotocols, custom headers, binary frames, and per-message assertions.
 - Dockerized JMeter execution.
 - Reports from Loadwright runs or existing JMeter JTL files.
 - Initial OpenAPI 3.x import for simple HTTP APIs.
@@ -20,7 +21,6 @@ Loadwright `v0.1.0` is intentionally focused on HTTP API load-test workflows.
 ## Not Yet In Scope
 
 - Full JMeter GUI feature parity.
-- WebSocket testing.
 - JMeter plugin management.
 - Distributed load generation across multiple workers.
 - Historical trend storage.
