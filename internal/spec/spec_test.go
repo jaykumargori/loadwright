@@ -235,6 +235,33 @@ func TestWebSocketRequestRequiresURLWhenTargetIsHTTP(t *testing.T) {
 	}
 }
 
+func TestHTTPRequestRejectedWhenTargetIsWebSocket(t *testing.T) {
+	// Regression: HTTP requests with a ws/wss target must fail validation fast
+	// instead of silently compiling to an invalid HTTPSamplerProxy with protocol=ws.
+	// Minimal repro from maintainer review:
+	//   name: mixed
+	//   target: ws://echo.example.com
+	//   requests:
+	//     - method: GET
+	//       path: /health
+	for _, scheme := range []string{"ws", "wss"} {
+		raw := Spec{
+			Name:   "mixed",
+			Target: scheme + "://echo.example.com",
+			Requests: []Request{{
+				Method: "GET",
+				Path:   "/health",
+			}},
+		}
+		err := raw.NormalizeAndValidate()
+		if err == nil || !strings.Contains(err.Error(), "HTTP request but target uses scheme") {
+			t.Fatalf("scheme=%s: expected HTTP-on-ws-target error, got %v", scheme, err)
+		}
+	}
+}
+
+
+
 func TestLoadFileParsesThresholdsAndRequestShape(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "spec.yaml")

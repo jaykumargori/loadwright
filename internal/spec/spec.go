@@ -278,6 +278,9 @@ func (s *Spec) NormalizeAndValidate(opts ...NormalizeOption) error {
 				validationErrors = append(validationErrors, fmt.Errorf("requests[%d].websocket.url is required when target is not ws or wss", index))
 			}
 		}
+		if s.Requests[index].Protocol != "websocket" && (parsedTarget.Scheme == "ws" || parsedTarget.Scheme == "wss") {
+			validationErrors = append(validationErrors, fmt.Errorf("requests[%d] is an HTTP request but target uses scheme %q; use an http or https target for HTTP requests", index, parsedTarget.Scheme))
+		}
 		if !s.Requests[index].Timeout.Set && s.Defaults.Timeout.Set {
 			s.Requests[index].Timeout = s.Defaults.Timeout
 		}
