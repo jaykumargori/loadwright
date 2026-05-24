@@ -18,11 +18,11 @@ Start Docker Desktop or your Docker daemon, then rerun `loadwright doctor --deep
 
 ## Image Pull Or Startup Fails
 
-Loadwright uses `justb4/jmeter:5.6.3` by default for HTTP runs.
+Loadwright uses `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7` by default for HTTP runs.
 
 ```bash
-docker pull justb4/jmeter:5.6.3
-loadwright doctor --deep --image justb4/jmeter:5.6.3
+docker pull justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7
+loadwright doctor --deep --image justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7
 ```
 
 If your environment blocks public image pulls, mirror the image internally and pass it with `--image`:
@@ -59,9 +59,9 @@ If Docker reports `unauthorized`, use the release binary or `go install` path in
 WebSocket specs currently require the bundled plugin-enabled JMeter image.
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.6.3 -f docker/jmeter/Dockerfile .
-loadwright doctor --deep --image loadwright/jmeter-websocket:5.6.3
-loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:5.6.3
+docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .
+loadwright doctor --deep --image loadwright/jmeter-websocket:5.5
+loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:5.5
 ```
 
 HTTP examples do not require this WebSocket image.

@@ -60,7 +60,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `Loadwright: Docker-first, spec-driven JMeter automation
 
 Usage:
-  loadwright doctor [--deep] [--image justb4/jmeter:5.6.3]
+  loadwright doctor [--deep] [--image IMAGE]
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]

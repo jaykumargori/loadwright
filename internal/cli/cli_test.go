@@ -686,7 +686,7 @@ thresholds:
 	if manifest.JMX != filepath.ToSlash(filepath.Join("results", "smoke", "shim-run.jmx")) {
 		t.Fatalf("unexpected JMX path: %+v", manifest)
 	}
-	if manifest.Image != "justb4/jmeter:5.6.3" || !manifest.CI {
+	if manifest.Image != "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7" || !manifest.CI {
 		t.Fatalf("unexpected run flags: %+v", manifest)
 	}
 	if manifest.Artifacts.ReportHTML != filepath.ToSlash(filepath.Join("results", "smoke", "index.html")) ||
@@ -924,7 +924,7 @@ exit 0
 	if code != 1 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "docker unavailable: justb4/jmeter:5.6.3") ||
+	if !strings.Contains(stderr.String(), "docker unavailable: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
 		!strings.Contains(stderr.String(), "Start Docker Desktop") {
 		t.Fatalf("expected actionable docker failure, got stderr=%s", stderr.String())
 	}
@@ -1024,7 +1024,7 @@ exit 0
 	if code != 1 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "jmeter startup failed: justb4/jmeter:5.6.3") ||
+	if !strings.Contains(stderr.String(), "jmeter startup failed: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
 		!strings.Contains(stderr.String(), "loadwright doctor --deep") {
 		t.Fatalf("expected startup failure, got stderr=%s", stderr.String())
 	}
@@ -1063,7 +1063,7 @@ exit 1
 	if code != 1 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "test execution failed: justb4/jmeter:5.6.3") ||
+	if !strings.Contains(stderr.String(), "test execution failed: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
 		!strings.Contains(stderr.String(), "CannotResolveClassException") ||
 		!strings.Contains(stderr.String(), "WebSocket specs require an image") {
 		t.Fatalf("expected test execution failure, got stderr=%s", stderr.String())

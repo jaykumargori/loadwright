@@ -1,8 +1,10 @@
 package runtime
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +13,7 @@ import (
 	"strings"
 )
 
-const DefaultJMeterImage = "justb4/jmeter:5.6.3"
+const DefaultJMeterImage = "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7"
 
 type ErrorKind string
 
@@ -137,17 +139,18 @@ func RunJMeter(options RunOptions) error {
 		"-l", "/work/" + filepath.ToSlash(filepath.Join(mustRel(absWorkDir, resultsAbs), options.JTLName)),
 	}
 	cmd := exec.Command("docker", args...)
-	output, err := cmd.CombinedOutput()
-	if len(output) > 0 {
-		_, _ = os.Stderr.Write(output)
-	}
-	if err != nil {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	if err := cmd.Run(); err != nil {
+		output := stdout.String() + stderr.String()
 		return &RuntimeError{
 			Kind:     ErrorTestExecution,
 			Image:    options.Image,
 			Cause:    err,
-			Output:   string(output),
-			Recovery: testExecutionRecovery(string(output)),
+			Output:   output,
+			Recovery: testExecutionRecovery(output),
 		}
 	}
 	return nil
